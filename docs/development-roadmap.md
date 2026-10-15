@@ -8,7 +8,7 @@
 
 ## 1. Roadmap Phasing Strategy Overview
 
-The platform development is structured into 7 distinct, verifiable phases. 
+The following phases are proposed, not implementation status. Education scope is extended by the review gates below.
 Each phase delivers an end-to-end working capability, maintains test coverage, and enforces the separation between the **Platform Super Admin (Django backend)** and the **Business Dashboard (Next.js frontend)**:
 
 ```
@@ -63,7 +63,7 @@ Each phase delivers an end-to-end working capability, maintains test coverage, a
 - **Backend Deliverables:**
   - DRF permission class: `RequiresModule('module_code')`.
   - Standardized error payload on disabled module: `403 Forbidden` (`code: MODULE_DISABLED`).
-  - Dynamic discovery endpoint: `GET /api/v1/organizations/{id}/modules`.
+  - Dynamic discovery endpoint: `GET /api/v1/companies/{company_id}/capabilities`.
 - **Frontend Deliverables:**
   - `useOrganizationModules` React hook in Next.js.
   - Dynamic navigation sidebar: conditionally renders only the modules present in `enabled_modules`.
@@ -137,3 +137,13 @@ Each phase delivers an end-to-end working capability, maintains test coverage, a
   - Configure PgBouncer connection pooling.
 - **Verification Gate:**
   - Concurrent load test simulating 500 simultaneous POS cashier checkouts with zero lock timeouts and zero financial balance discrepancies.
+
+## Education extension review gates (2026-10-15)
+
+Phase 2 must first harden the existing tenancy module service: multi-edge dependency DAG, business-type eligibility, platform-only staged changes, atomic audit/version and direct-admin bypass prevention. Preserve existing identity/retail APIs.
+
+Phase 5 includes mandatory student/teacher/group/enrollment foundation, optional attendance/classrooms/scheduling and tuition. Build the independent frontend/education application; relocate retail to frontend/shop only with implementation authorization. Enforce all five roles and expose effective capabilities. SQLite concurrency, decimal round trips and immutable payment/journal/reversal tests are release gates.
+
+Phase 6 includes independently gated homework, exams, private video/progress, XP/coins/rewards and per-source analytics. Verify a center enabling only attendance/tuition/exams cannot access any other optional module, including via jobs/files/exports or stale caches. Verify data survives disable/re-enable. No automatic backfill.
+
+Architecture approval does not authorize code, dependencies, migrations, commits or deployment. Await explicit implementation scope. Detailed education policy in architecture.md, module-system.md, database-schema.md and roles-permissions.md supersedes older bundled timetable/room descriptions in the historical phase outline.

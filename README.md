@@ -4,7 +4,7 @@ IDROK AI is a multi-tenant business automation platform built as an API-first mo
 
 The first business module is **Shop Debt Management (Nasiya Savdo / Daftari)**, designed for neighborhood shops and retail stores to digitize customer debt tracking, manage repayment collections, enforce credit limits, and maintain an immutable financial ledger.
 
-**Status: Architecture Proposal Awaiting Approval.** Work is currently documentation-only. No backend/frontend code implementation, dependency installation, or deployment has been executed.
+**Status: Education Architecture Proposal Awaiting Approval.** Existing shared backend and retail frontend code are present. This education extension is documentation-only; no feature implementation, dependency installation, or deployment is included.
 
 ---
 
@@ -44,7 +44,8 @@ The first business module is **Shop Debt Management (Nasiya Savdo / Daftari)**, 
 
 ```text
 backend/              Django REST Framework API
-frontend/             Next.js, TypeScript, Tailwind CSS
+frontend/shop/        Separate retail Next.js application (planned move from frontend/)
+frontend/education/   Separate education Next.js + TypeScript + Tailwind application (proposed)
 docs/                 Shared project documentation
 ```
 

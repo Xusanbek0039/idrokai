@@ -2,7 +2,7 @@
 
 **Status:** Proposed Architecture  
 **Primary Database:** SQLite3 (Local Dev & First MVP)  
-**Production Database:** PostgreSQL 16+ (Seamless migration target)  
+**Production Database:** PostgreSQL 16+ (validated migration target)
 **ORM Engine:** Django ORM with Database-Agnostic Models  
 
 ---
@@ -11,7 +11,7 @@
 
 1. **Primary Keys:** Every model uses an immutable UUIDv4 primary key (`models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`).
 2. **Tenant Scoping:** All tenant-owned records inherit from `OrganizationScopedModel`, which enforces a mandatory, indexed foreign key to `Organization` (`on_delete=models.PROTECT`).
-3. **Compound Tenant Indexes:** Every tenant-owned table defines compound database indexes starting with `organization_id` (e.g. `index_together = [['organization', 'phone_number']]`).
+3. **Compound Tenant Indexes:** Every tenant-owned table defines compound database indexes starting with `company_id` (e.g. `index_together = [['organization', 'phone_number']]`).
 4. **Monetary Precision:** All monetary balances, debts, prices, and payments strictly use `models.DecimalField(max_digits=12, decimal_places=2)`. Floating point types are prohibited.
 5. **Double-Entry Ledgers:** Financial balance adjustments never overwrite ledger history; education postings write balanced immutable journal lines; cached balances are projections recomputed using Decimal. Existing retail balance logs are not proof of double-entry accounting.
 6. **Portability:** Dialect-specific extensions (PostgreSQL `ArrayField`, `HStoreField`, native JSONB operators) are excluded in favor of standard ANSI SQL constructs and standard `models.JSONField(default=dict, blank=True)`.
@@ -25,7 +25,8 @@ erDiagram
   BusinessType ||--o{ Organization : "categorizes"
   BusinessType ||--o{ BusinessTypeModule : "defines defaults for"
   Module ||--o{ BusinessTypeModule : "included in"
-  Module ||--o{ Module : "depends on"
+  Module ||--o{ ModuleDependency : "requires"
+  Module ||--o{ ModuleDependency : "prerequisite"
   Module ||--o{ OrganizationModule : "entitled in"
   Organization ||--o{ OrganizationModule : "activates"
   Organization ||--o{ Membership : "employs"
@@ -100,8 +101,8 @@ Mapping between a `BusinessType` and eligible `Module`s.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `business_type_id`| FK (BusinessType) | on_delete=CASCADE | Business vertical |
-| `module_id` | FK (Module) | on_delete=CASCADE | Associated module |
+| `business_type_id`| FK (BusinessType) | on_delete=PROTECT | Business vertical |
+| `module_id` | FK (Module) | on_delete=PROTECT | Associated module |
 | `is_default` | BOOLEAN | Default=True | Automatically enabled on tenant creation |
 | `is_mandatory` | BOOLEAN | Default=False | Cannot be disabled for this business type |
 | **UniqueConstraint** | `(business_type, module)` | Unique combination |
@@ -112,8 +113,8 @@ Per-tenant module activation and configuration record.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | on_delete=CASCADE | Tenant organization |
-| `module_id` | FK (Module) | on_delete=CASCADE | Functional module |
+| `company_id` | FK (Company) | on_delete=PROTECT | Tenant organization |
+| `module_id` | FK (Module) | on_delete=PROTECT | Functional module |
 | `is_enabled` | BOOLEAN | Default=True, db_index=True | Runtime activation status |
 | `config` | JSONField | Default=dict, Blank=True | Tenant-specific module settings |
 | `activated_at` | DATETIME | auto_now_add=True | Timestamp of first activation |
@@ -127,8 +128,8 @@ Maps a `User` to an `Organization` with a specific business role.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | on_delete=CASCADE, db_index=True | Tenant organization |
-| `user_id` | FK (User) | on_delete=CASCADE, db_index=True | Authenticated user |
+| `company_id` | FK (Company) | on_delete=PROTECT, db_index=True | Tenant organization |
+| `user_id` | FK (User) | on_delete=PROTECT, db_index=True | Authenticated user |
 | `role` | VARCHAR(32) | db_index=True | Role (`org_owner`, `org_manager`, `cashier`, `teacher`, `accountant`) |
 | `is_active` | BOOLEAN | Default=True | Active staff status |
 | `created_at` | DATETIME | auto_now_add=True | Joined timestamp |
@@ -140,7 +141,7 @@ Immutable system audit log for platform and tenant security.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | Nullable, on_delete=SET_NULL | Tenant scope (Null for Super Admin platform events) |
+| `company_id` | FK (Company) | Nullable, on_delete=SET_NULL | Tenant scope (Null for Super Admin platform events) |
 | `actor_id` | FK (User) | Nullable, on_delete=SET_NULL | User who performed the action |
 | `action` | VARCHAR(64) | Not Null, db_index=True | Action code (`MODULE_ENABLED`, `ORG_SUSPENDED`) |
 | `target_type` | VARCHAR(64) | Not Null | Target model name |
@@ -159,7 +160,7 @@ Debtor customer profile belonging to an organization.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | on_delete=CASCADE, db_index=True | Tenant owner |
+| `company_id` | FK (Company) | on_delete=PROTECT, db_index=True | Tenant owner |
 | `full_name` | VARCHAR(255) | Not Null, db_index=True | Customer full name |
 | `phone_number` | VARCHAR(32) | Not Null, db_index=True | Contact phone |
 | `address` | VARCHAR(512) | Blank=True | Residence or shop address |
@@ -177,8 +178,8 @@ An issuance of debt ("Nasiya savdo") for purchased goods.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | on_delete=CASCADE, db_index=True | Tenant owner |
-| `customer_id` | FK (DebtCustomer) | on_delete=CASCADE, db_index=True | Debtor customer |
+| `company_id` | FK (Company) | on_delete=PROTECT, db_index=True | Tenant owner |
+| `customer_id` | FK (DebtCustomer) | on_delete=PROTECT, db_index=True | Debtor customer |
 | `amount` | DECIMAL(12, 2) | Check > 0 | Principal debt amount |
 | `remaining_unpaid`| DECIMAL(12, 2)| Check >= 0 | Unpaid balance of this debt |
 | `description` | TEXT | Not Null | Itemized list of goods |
@@ -194,8 +195,8 @@ A payment received from a customer settling debts.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | on_delete=CASCADE, db_index=True | Tenant owner |
-| `customer_id` | FK (DebtCustomer) | on_delete=CASCADE, db_index=True | Debtor customer |
+| `company_id` | FK (Company) | on_delete=PROTECT, db_index=True | Tenant owner |
+| `customer_id` | FK (DebtCustomer) | on_delete=PROTECT, db_index=True | Debtor customer |
 | `debt_id` | FK (DebtRecord) | Nullable, on_delete=SET_NULL | Optional specific debt |
 | `amount` | DECIMAL(12, 2) | Check > 0 | Repayment amount |
 | `payment_method` | VARCHAR(16) | Default='cash' | `cash`, `card`, `bank_transfer` |
@@ -210,8 +211,8 @@ Immutable audit ledger tracking every balance mutation.
 | Field Name | Type | Constraints / Attributes | Description |
 | --- | --- | --- | --- |
 | `id` | UUID | Primary Key, default=uuid4 | Unique identifier |
-| `organization_id` | FK (Organization) | on_delete=CASCADE, db_index=True | Tenant owner |
-| `customer_id` | FK (DebtCustomer) | on_delete=CASCADE, db_index=True | Customer |
+| `company_id` | FK (Company) | on_delete=PROTECT, db_index=True | Tenant owner |
+| `customer_id` | FK (DebtCustomer) | on_delete=PROTECT, db_index=True | Customer |
 | `transaction_type`| VARCHAR(32) | Not Null | `DEBT_ISSUED`, `REPAYMENT_RECEIVED`, `ADJUSTMENT` |
 | `amount` | DECIMAL(12, 2) | Not Null | Transaction magnitude |
 | `balance_before` | DECIMAL(12, 2) | Not Null | Balance prior to mutation |
@@ -236,7 +237,7 @@ All schema tables above are target descriptions, not implemented field guarantee
 | IdempotencyRecord | company, actor, operation, key, request_hash, status, response_reference, expires_at; unique(company,actor,operation,key). Hash mismatch 409; pending 409; guard authorization before replay. Financial business uniqueness outlives 24-hour HTTP response cache. |
 | DurableJob / Outbox | company, required modules, actor/system identity, business_key, access_version, status, attempts, error_code, timestamps; unique(company,operation,business_key). paused_module is nonexecuting. Dispatch lease/drain metadata coordinates disablement. |
 
-Audit/company/financial history must not cascade-delete. Archive centers and profiles; use PROTECT on financial relations. User removal may null actor links while preserving actor identifier snapshots. No model claims a universal on_delete=CASCADE base. Nonfinancial child cleanup is separately authorized and never triggered by a module toggle.
+Audit/company/financial history must not cascade-delete. Archive centers and profiles; use PROTECT on financial relations. User removal may null actor links while preserving actor identifier snapshots. Deletion behavior is chosen per relationship; financial history is protected. Nonfinancial child cleanup is separately authorized and never triggered by a module toggle.
 
 ## 6. Education data model
 
@@ -258,7 +259,7 @@ All following records have UUID id, company FK PROTECT, created_at/updated_at UT
 | TuitionPayment / edu_tuition | student FK, amount Decimal(12,2)>0, currency, method(cash/card/bank_transfer), receipt_number, external_reference nullable, recorded_by membership, received_at, posted_at | unique(company,receipt_number); immutable, no PUT/PATCH/DELETE/admin edits. Receipt entry records money received, not external gateway capture. Duplicate external reference within method/company rejected when provided. |
 | PaymentAllocation / edu_tuition | payment FK, charge FK, amount Decimal(12,2)>0, posted_at | unique(company,payment,charge); student/currency match; total allocations = payment amount, each charge not overpaid. No unapplied credit in initial scope. Service validates under serialized transaction. |
 | PaymentReversal / edu_tuition | payment OneToOne FK, reason, amount, actor, journal FK, posted_at | Full reversal only; amount original amount; exactly one reversal per payment. Original remains immutable; inverse allocations restore outstanding charges. Owner only; no real-world refund implied. |
-| TuitionJournal / edu_tuition | event_type, source_type, source_id, currency, reversal_of nullable, posted_at, actor | unique(company,source_type,source_id,event_type); immutable. Corrections append inverse journal and separate correction charge, never overwrite a posted invoice. |
+| TuitionJournal / edu_tuition | event_type, source_type, source_id, currency, reversal_of nullable, posted_at, actor | unique(company,source_type,source_id,event_type); immutable. Corrections append a ChargeAdjustment and corresponding inverse/additional journal, never overwrite a posted invoice. |
 | TuitionJournalLine / edu_tuition | journal FK, account_code, student FK, charge/payment nullable FKs, debit Decimal(12,2), credit Decimal(12,2) | Exactly one positive side per line; balanced sum(debit)=sum(credit) per journal checked using Decimal before posting. Charge: Dr receivable/Cr tuition revenue; receipt: Dr cash-or-bank/Cr receivable; reversal inverse. Not a complete statutory accounting/tax product. |
 | HomeworkAssignment / edu_homework | group FK, author membership, title, instructions, due_at, max_score positive Decimal(8,2), version, status(draft/published/closed), published_at | Publication snapshot/version immutable; corrections create new version; assigned teachers only. |
 | HomeworkSubmission / edu_homework | assignment FK/version, enrollment FK, attempt_number positive, answer_text, private asset FK nullable, submitted_at, score nullable Decimal(8,2), feedback, graded_by nullable | unique(company,assignment,enrollment,attempt_number); student cannot change grades. Published grade revisions audited; service enforces score <= assignment max. Parent assignment/enrollment groups match. |
@@ -283,3 +284,7 @@ All payment/allocation/journal/audit/idempotency writes commit in one atomic tra
 Idempotency matches company+actor+operation+key, with a separate body hash; changed body is 409, matching complete retries return stored authorized response, pending is 409. Receipt/business source uniqueness persists after cache expiry. Unique monthly charge keys prevent duplicate recurring invoices across jobs, retries and re-enable. No charge/backfill occurs automatically for periods while tuition was disabled.
 
 Financial business rules are not made safe by transaction.atomic alone. SQLite serializes writers, can fail on lock upgrades and has no row locking; acquire company write boundary first, retry whole rolled-back transaction for busy/conflict with bounded backoff, then 503 Retry-After. Serialize schedule/capacity/attempt/redemption invariants similarly. PostgreSQL later adds row locks/RLS without removing service checks. No concurrency guarantee is claimed until those workflows have adversarial tests.
+
+Private upload lifecycle: authorize purpose and group/assignment parent, store staged creator-only asset, then bind on video/assignment/submission creation after company/group/actor checks. Learners cannot stream staged/unpublished videos. Homework submission upload uses submissions.submit, not teacher homework.manage. No unsigned permanent storage URL is exposed. Ownership FKs on existing education records cannot be reparented through PATCH; schedule teacher/classroom changes affect future occurrences through conflict-checked services.
+
+ChargeAdjustment / edu_tuition: immutable company/charge FK PROTECT, direction(debit/credit), positive DecimalField(12,2) amount, currency, reason, actor, journal FK and posted_at. Owner-only tuition.adjust posts a balanced receivable/revenue adjustment and audit atomically. Net obligation is original net plus debit adjustments minus credit adjustments; credit cannot reduce below already allocated payments (reverse receipts first when necessary). The original monthly charge uniqueness remains unchanged; adjustments do not create duplicate monthly charges.

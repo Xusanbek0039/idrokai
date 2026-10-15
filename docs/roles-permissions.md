@@ -26,7 +26,7 @@ A = entire center; G = currently assigned teaching groups; S = own linked studen
 | attendance.manage | A | A | A | G | — |
 | tuition.read / tuition.manage (fee agreements, charges) | A | A | — | — | S read only |
 | payments.read / payments.post | A | A | — | — | S read only |
-| payments.reverse / tuition.discount | A | — | — | — | — |
+| payments.reverse / tuition.discount / tuition.adjust | A | — | — | — | — |
 | homework.read / homework.manage (author, publish, grade) | A | A | A | G | S read published |
 | submissions.read | A | A | A | G | S |
 | submissions.submit | — | — | — | — | S |

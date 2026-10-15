@@ -55,7 +55,7 @@ Canonical prefix is /api/v1/companies/{company_id}; no new /organizations alias.
 | /education/students, /education/teachers | edu_students | Registry read/manage; teacher sees assigned minimal roster, student own profile |
 | /education/groups, /education/enrollments | edu_groups | Registry read/manage; teacher assigned, student own active enrollments |
 | /education/classrooms | edu_classrooms | Operations manage, teacher assigned read |
-| /education/schedules | edu_scheduling | Operations manage, teacher/student assigned read; classroom_id also requires edu_classrooms |
+| /education/schedules, /education/scheduled-sessions | edu_scheduling | Operations manage, teacher/student assigned read; classroom_id also requires edu_classrooms |
 | /education/sessions | edu_attendance | Create/read ad hoc attendance sessions only; scheduled sessions use scheduling route |
 | /education/attendance | edu_attendance | Staff manage, assigned teacher mark, student own read |
 | /education/fee-agreements, /education/charges | edu_tuition | Billing staff manage/read; student own charge read |
@@ -75,3 +75,7 @@ Authoring responses never share schemas containing correct answers with learner 
 See architecture.md for transaction serialization and external dispatch drain. Claiming an enabled job is insufficient; recheck before every action/retry. Disabled jobs remain paused_module; administrative status/audit writes are permitted, business writes/notifications/exports are not. Resume/backfill requires preview and unique source-event keys. Automatic rewards require both source and gamification modules at processing time.
 
 Required later checks: direct disabled endpoint calls return 403; data and file hashes unchanged across toggle; stale caches/exports fail; disabling prerequisite blocked; explicit valid batch atomic; cycles rejected; different business type blocked; platform operational bypass absent; queued/running/retried jobs perform no actions after disable completes. These checks are specified, not executed now.
+
+The OpenAPI additionally defines assigned learner question delivery under /education/tests/{id}/questions, author-only answer keys, publication/grading/release actions, and parent-scoped asset upload/streaming. Scheduled-session generation is bounded to 31 days and uses business uniqueness and conflict checks. These subroutes inherit the same parent action/module policy.
+
+Owner-only /education/charges/{id}/adjustments requires edu_tuition and tuition.adjust; append debit/credit correction with balanced journal, preserving the unique original monthly charge.

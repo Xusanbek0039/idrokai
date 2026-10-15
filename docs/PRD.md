@@ -59,11 +59,11 @@ A foundational requirement of IDROK AI is the strict architectural separation be
   - Maintain platform isolation: administrative views must not leak cross-tenant operational data into tenant contexts.
 
 ### 2.2 Experience 2: Business Dashboard (Next.js Frontend)
-- **Deployment:** Decoupled Next.js 14+ application (TypeScript, Tailwind CSS, App Router).
+- **Deployment:** Separate retail and education Next.js 14+ applications (TypeScript, Tailwind CSS, App Router).
 - **Audience:** Business Owners, Managers, Cashiers, Teachers, and Accountants.
 - **Tech Stack:** Next.js App Router, React Server/Client Components, Tailwind CSS, consuming `/api/v1` with server-side session forwarding.
 - **Dynamic Module UI:**
-  - The frontend queries `/api/v1/organizations/{org_id}/modules` upon tenant selection.
+  - Each separate frontend queries `/api/v1/companies/{company_id}/capabilities` upon tenant selection.
   - The navigation sidebar, dashboard widgets, and action routes dynamically render **only** the modules activated for that specific organization.
   - Attempting to navigate to or invoke APIs for a disabled module is cleanly blocked by backend middleware and client guards.
 
@@ -83,19 +83,19 @@ Tailored for grocery stores, clothing shops, electronics retailers, and wholesal
 | `retail_reports` | Financial & Debt Reports | Daily cashier reconciliations, debt aging reports, collection summaries. | `retail_debts` |
 | `retail_reminders` | Debt Reminders | Automated customer repayment follow-ups, cashier task reminders. | `retail_debts` |
 
-### 3.2 Business Type: Education Center (`education_center`)
-Tailored for private schools, training centers, tutoring academies, and language learning institutes:
+### 3.2 Business Type: Education Center (education_center)
 
-| Module Code | Module Name | Core Capabilities | Dependencies |
-| --- | --- | --- | --- |
-| `edu_students` | Student Management | Student profiles, parent contacts, enrollment status, medical/special notes. | None (Core) |
-| `edu_groups` | Cohort & Group Management | Course cohorts, room allocations, instructor assignments, weekly timetables. | `edu_students` |
-| `edu_tuition` | Tuition Billing & Payments | Monthly tuition generation, invoice discounts, payment recording (cash/card/bank). | `edu_students`, `edu_groups` |
-| `edu_debts` | Tuition Debt Tracking | Unpaid student fee balances, overdue payment warnings, family payment aggregation. | `edu_tuition` |
-| `edu_lms` | Lessons & Video Content | Class syllabus, recorded video lessons, supplementary learning materials. | `edu_groups` |
-| `edu_homework` | Homework & Submissions | Assignment distribution, student file submissions, teacher grading and feedback. | `edu_groups` |
-| `edu_exams` | Tests & Examinations | Quiz builder, test results grading, student rank reports, exam certificates. | `edu_groups` |
-| `edu_reports` | Academic & Revenue Reports | Cohort attendance rates, academic progress metrics, recurring tuition revenue. | `edu_tuition`, `edu_groups` |
+One existing DRF backend serves separate frontend/shop and frontend/education applications; the education app uses Next.js, TypeScript and Tailwind. Reuse existing User, Company and CompanyMember; no duplicate authentication. The existing retail frontend will move only after implementation approval.
+
+Education roles are Owner (edu_owner), Assistant Admin (edu_assistant_admin), Operations Manager (edu_operations_manager), Teacher (teacher) and Student (student), tenant-scoped as defined in roles-permissions.md. Only Platform Super Admin can toggle center modules.
+
+Mandatory foundation: edu_students (student/teacher profiles) and edu_groups (groups/enrollment). Optional modules are edu_classrooms, edu_scheduling, edu_attendance, edu_tuition, edu_debts, edu_homework, edu_exams, edu_lms (video), edu_gamification and edu_reports. See module-system.md for the exact dependency graph and route gates. No optional modules are enabled by default. A center selecting only attendance/payments/tests has only those three optional modules, in addition to the foundation; recurring scheduling and classrooms are not required.
+
+Acceptance: membership + role/action/object scope + eligible effective module must pass server-side on every endpoint, private download, report, cached response and background action. Disabled modules reject with 403 MODULE_DISABLED; data survives and is available again after re-enable subject to current permissions. Cross-tenant records/references return 404. Capabilities expose current user effective modules and permissions. Frontend hiding is not a security control.
+
+Platform center detail must show organization/owner, separate employee/student summaries, eligible/enabled/disabled modules, subscription, change history and operational statistics. Staged toggles show dependencies, preserve-data impact and a reason/confirmation for sensitive changes. All mutation paths use atomic dependency validation and auditing.
+
+Gamification includes immutable XP/coin transactions, group leaderboard aliases, reward inventory and atomic redemption; no conversion into money. Learning includes versioned homework/submissions, tests/questions/attempts/released results and private videos/progress. Attendance supports ad hoc lessons without scheduling. Tuition covers monthly enrollment fee agreements, charges, manual receipts/allocations and owner-only full reversal; no external payment gateway charge is authorized.
 
 ---
 
@@ -106,7 +106,7 @@ Tailored for private schools, training centers, tutoring academies, and language
 3. **BusinessType Template Assignment:** A `BusinessTypeModule` catalog dictates which modules are mandatory, default-enabled, or optional for each business type.
 4. **Zero Data Destruction:** Deactivating a module for an organization strictly disables write and read operations in the API. **Under no circumstances is historical table data deleted or dropped.** Re-enabling the module instantly restores full access to past records.
 5. **Dependency Tree Enforcement:**
-   - Enabling a module automatically verifies that all dependent prerequisite modules are active (or enables them atomically).
+   - Enabling validates all prerequisites; only an explicitly reviewed batch may enable prerequisites together, never implicitly.
    - Disabling a module required by other active modules is blocked until dependent modules are deactivated first.
 6. **Backend-Authoritative Access Control:**
    - Every API request targeting a modular feature verifies `request.organization.has_module(code)` in DRF permission classes.
@@ -123,11 +123,11 @@ Tailored for private schools, training centers, tutoring academies, and language
 ### 5.1 Initial Database: SQLite3 (Local Dev & First MVP)
 - SQLite3 is configured with Write-Ahead Logging (`PRAGMA journal_mode=WAL;`), 5-second busy timeout (`PRAGMA busy_timeout=5000;`), and foreign key enforcement (`PRAGMA foreign_keys=ON;`).
 - SQLite's single-writer limitation is respected: **the platform never relies on `select_for_update()`**, which does not provide PostgreSQL-style row-level locks.
-- Concurrency and financial safety are guaranteed via application-level atomic boundaries:
+- Financial safety requires more than atomic boundaries and is subject to implementation verification:
   - All mutating debt, payment, and tuition operations execute inside `transaction.atomic()`.
   - Financial calculations use `DecimalField(max_digits=12, decimal_places=2)`. Floats are strictly prohibited.
-  - Safe balance recalculation and atomic `F()` delta updates prevent balance drift.
-  - Double-entry immutable ledgers (`DebtLedger`, `TuitionLedger`) provide 100% auditable accounting trails.
+  - Education financial arithmetic uses Decimal and versioned serialized writes; SQLite numeric affinity/rounding and busy errors require explicit handling. Do not treat SQL F()/SUM arithmetic as the ledger authority.
+  - Education uses balanced immutable tuition journals with protected relations; existing balance logs alone are not double-entry accounting.
   - Mandatory `Idempotency-Key` headers eliminate double-billing from network retries or repeated user clicks.
 
 ### 5.2 Target Production Database: PostgreSQL Migration Gate
@@ -145,9 +145,13 @@ Tailored for private schools, training centers, tutoring academies, and language
 | --- | --- | --- | --- |
 | **P1** | **Platform Core & Tenancy** | `BusinessType`, `Organization`, `Membership`, `AuditLog`, custom User model, session auth. | Super Admin core, organization provisioning, multi-tenant isolation. |
 | **P2** | **Module Registry & Django Super Admin** | `Module`, `BusinessTypeModule`, `OrganizationModule`, customized Django Admin UI, module dependency graph. | Platform Super Admin console with module toggles, status views, and organization audit history. |
-| **P3** | **Module Enforcement & API Foundation** | DRF `HasModuleEnabled` permission class, error schemas, OpenAPI 3.1 contract. | Backend-authoritative module blocking, dynamic module list API. |
-| **P4** | **Retail Debt Ledger MVP** | Customer debtor management, atomic debt issuance, repayment processing, immutable ledger, POS cashier UI in Next.js. | Production-ready Retail Store MVP running on SQLite3 WAL. |
+| **P3** | **Module Enforcement & API Foundation** | DRF `HasModuleEnabled` permission class, error schemas, OpenAPI 3.0.3 contract. | Backend-authoritative module blocking, dynamic module list API. |
+| **P4** | **Retail Debt Ledger MVP** | Customer debtor management, atomic debt issuance, repayment processing, immutable ledger, POS cashier UI in Next.js. | Low-concurrency Retail Store MVP; monetary and concurrency release checks required. |
 | **P5** | **Retail Expansion** | Inventory management, SKUs, barcode support, sale checkout, daily shift reports. | Comprehensive Retail POS suite. |
 | **P6** | **Education Center MVP** | Student profiles, cohort groups, tuition billing, fee debt tracking. | Education Center operational release. |
 | **P7** | **Education LMS & Grading** | Lesson video streaming, homework submissions, teacher grading, exams. | Complete Education Center management suite. |
 | **P8** | **PostgreSQL Migration** | Database cutover, row-level locking, connection pooling, production deployment. | High-concurrency multi-tenant production launch. |
+
+## 7. Education review decisions and release boundaries
+
+The detailed architecture/schema/module/role documents and additive OpenAPI 3.0.3 contract define this extension. The existing contract is 3.0.3, not 3.1; retaining it avoids an unrelated tooling migration. Company routes stay canonical; organization is a domain alias. SQLite remains initial-only and PostgreSQL/RLS is a later authorized migration. All education features, frontend relocation and permission hardening remain unimplemented pending architecture approval and explicit implementation scope.

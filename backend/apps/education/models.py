@@ -111,8 +111,9 @@ class EducationStudent(UUIDModel, TimeStampedModel):
         related_name='student_profile'
     )
     name = models.CharField(max_length=255, db_index=True)
-    phone = models.CharField(max_length=32, db_index=True)
+    phone = models.CharField(max_length=32, db_index=True, help_text="Telefon raqami (Login)")
     parent_phone = models.CharField(max_length=32, blank=True)
+    password_text = models.CharField(max_length=128, default='12345678', help_text="Admin belgilagan parol")
     group = models.ForeignKey(
         EducationGroup,
         on_delete=models.SET_NULL,

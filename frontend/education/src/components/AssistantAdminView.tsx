@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { mockStudents, mockPayments, mockGroups } from '../data/mockData';
+import { formatMoney } from '../lib/format';
 import {
   Users,
   CreditCard,
@@ -135,11 +136,11 @@ export function AssistantAdminView() {
                     {s.balance < 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 font-bold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
                         <AlertCircle className="h-3 w-3" />
-                        {Math.abs(s.balance).toLocaleString()} UZS qarz
+                        {formatMoney(Math.abs(s.balance))} UZS qarz
                       </span>
                     ) : s.balance > 0 ? (
                       <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-                        +{s.balance.toLocaleString()} UZS ortiqcha
+                        +{formatMoney(s.balance)} UZS ortiqcha
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
@@ -204,7 +205,7 @@ export function AssistantAdminView() {
                   <td className="py-3 font-mono font-bold text-brand-600">{p.receiptNumber}</td>
                   <td className="py-3 font-bold text-slate-900 dark:text-white">{p.studentName}</td>
                   <td className="py-3 text-slate-600 dark:text-slate-300">{p.groupName}</td>
-                  <td className="py-3 font-bold text-emerald-600">{p.amount.toLocaleString()} UZS</td>
+                  <td className="py-3 font-bold text-emerald-600">{formatMoney(p.amount)} UZS</td>
                   <td className="py-3">
                     <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300 uppercase">
                       {p.method}

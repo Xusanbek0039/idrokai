@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { formatMoney } from '../lib/format';
 import {
   GraduationCap,
   Award,
@@ -153,7 +154,7 @@ export function StudentView() {
             </div>
           </div>
           <div className="mt-2 text-base font-bold text-rose-600 dark:text-rose-400">
-            {Math.abs(student.balance).toLocaleString()} UZS to'lanishi kerak
+            {formatMoney(Math.abs(student.balance))} UZS to'lanishi kerak
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
             Oylik shartnoma: 750,000 UZS (500,000 to'langan)

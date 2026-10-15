@@ -175,7 +175,7 @@ export function OwnerView() {
 
                 <div className="text-right">
                   <div className="font-bold text-slate-800 dark:text-slate-200">
-                    {g.monthlyFee.toLocaleString()} so'm/oy
+                    {formatMoney(g.monthlyFee)} so'm/oy
                   </div>
                   <span className="inline-block mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     {g.studentsCount} ta o'quvchi
@@ -214,7 +214,7 @@ export function OwnerView() {
 
                   <div className="text-right">
                     <div className="font-bold text-rose-600 dark:text-rose-400">
-                      {Math.abs(s.balance).toLocaleString()} UZS
+                      {formatMoney(Math.abs(s.balance))} UZS
                     </div>
                     <button
                       onClick={() => setIsPaymentOpen(true)}

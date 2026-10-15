@@ -414,7 +414,7 @@ class MarketPayDebtView(APIView):
         notes = serializer.validated_data.get('notes', '')
         idempotency_key = uuid.uuid4()
 
-        repayment = record_repayment_service(
+        repayment_result = record_repayment_service(
             company=shop,
             customer=customer,
             amount=amount,
@@ -423,6 +423,7 @@ class MarketPayDebtView(APIView):
             recorded_by=request.user,
             idempotency_key=idempotency_key
         )
+        repayment = repayment_result[0] if isinstance(repayment_result, tuple) else repayment_result
 
         customer.refresh_from_db()
         return Response({

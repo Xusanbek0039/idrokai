@@ -78,6 +78,7 @@ class EducationStudentSerializer(serializers.ModelSerializer):
             'name',
             'phone',
             'parent_phone',
+            'password_text',
             'group',
             'group_name',
             'balance',
@@ -93,6 +94,9 @@ class EducationStudentSerializer(serializers.ModelSerializer):
 class EducationCreateStudentSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     phone = serializers.CharField(max_length=32)
+    password = serializers.CharField(max_length=128, required=False, default='12345678')
+    group_id = serializers.UUIDField(required=False, allow_null=True)
+    initial_payment = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
     group_id = serializers.UUIDField(required=False, allow_null=True)
     initial_payment = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
 

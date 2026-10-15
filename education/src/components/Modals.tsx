@@ -13,7 +13,7 @@ interface ModalProps {
   onSuccess?: () => void;
 }
 
-export function AddStudentModal({ isOpen, onClose }: ModalProps) {
+export function AddStudentModal({ isOpen, onClose, onSuccess }: ModalProps) {
   const { t } = useLanguage();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+998 9');
@@ -51,11 +51,17 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
         initial_payment: initialPayment ? Number(initialPayment) : 0,
       });
       mockStudents.unshift(newStudentObj);
+      onSuccess?.();
       alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi!\n\n📋 Login (Telefon): ${phone}\n🔑 Parol: ${password}\n🏫 Guruh: ${group}\n\nO'quvchi ushbu ma'lumotlar bilan o'z shaxsiy portaliga kira oladi.`);
     } catch {
       mockStudents.unshift(newStudentObj);
+      onSuccess?.();
       alert(`O'quvchi ro'yxatga olindi (Lokal rejimda saqlandi):\n\n📋 Login (Telefon): ${phone}\n🔑 Parol: ${password}\n🏫 Guruh: ${group}\n\nO'quvchi ushbu login va parol bilan tizimga kira oladi.`);
     }
+    setName('');
+    setPhone('+998 9');
+    setPassword('12345678');
+    setInitialPayment('');
     onClose();
   };
 

@@ -90,6 +90,7 @@ export const educationApi = {
   async createStudent(data: {
     name: string;
     phone: string;
+    password?: string;
     group_id?: string;
     initial_payment?: number;
   }) {

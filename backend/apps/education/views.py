@@ -96,6 +96,13 @@ class EducationLoginView(APIView):
                 company=company,
                 is_active=True
             ).first()
+            if not student:
+                student = EducationStudent.objects.filter(
+                    Q(phone__icontains=clean_digits) | Q(phone=username),
+                    is_active=True
+                ).first()
+            if student and student.company:
+                company = student.company
 
         if student:
             # Agar parol kiritilgan bo'lsa, tekshiramiz

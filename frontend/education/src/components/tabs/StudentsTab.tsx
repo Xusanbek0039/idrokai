@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { mockStudents, mockGroups } from '../../data/mockData';
 import { formatMoney } from '../../lib/format';
@@ -27,20 +27,23 @@ export function StudentsTab() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'debt' | 'paid'>('all');
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [version, setVersion] = useState(0);
 
-  const filteredStudents = mockStudents.filter((s) => {
-    const matchesSearch =
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.phone.includes(searchTerm);
-    const matchesGroup = selectedGroup === 'all' || s.groupName === selectedGroup;
-    const matchesStatus =
-      statusFilter === 'all'
-        ? true
-        : statusFilter === 'debt'
-        ? s.balance < 0
-        : s.balance >= 0;
-    return matchesSearch && matchesGroup && matchesStatus;
-  });
+  const filteredStudents = useMemo(() => {
+    return mockStudents.filter((s) => {
+      const matchesSearch =
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.phone.includes(searchTerm);
+      const matchesGroup = selectedGroup === 'all' || s.groupName === selectedGroup;
+      const matchesStatus =
+        statusFilter === 'all'
+          ? true
+          : statusFilter === 'debt'
+          ? s.balance < 0
+          : s.balance >= 0;
+      return matchesSearch && matchesGroup && matchesStatus;
+    });
+  }, [searchTerm, selectedGroup, statusFilter, version]);
 
   return (
     <div className="space-y-6">
@@ -171,6 +174,7 @@ export function StudentsTab() {
                       {s.groupName}
                     </span>
                     <div className="text-[10px] text-slate-400">{s.course}</div>
+                  </td>
                   <td className="py-3.5">
                     <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
                       {s.phone}
@@ -241,7 +245,11 @@ export function StudentsTab() {
         </div>
       </div>
 
-      <AddStudentModal isOpen={isAddStudentOpen} onClose={() => setIsAddStudentOpen(false)} />
+      <AddStudentModal
+        isOpen={isAddStudentOpen}
+        onClose={() => setIsAddStudentOpen(false)}
+        onSuccess={() => setVersion((v) => v + 1)}
+      />
       <RecordPaymentModal isOpen={isPaymentOpen} onClose={() => setIsPaymentOpen(false)} />
     </div>
   );

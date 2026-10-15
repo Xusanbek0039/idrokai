@@ -175,10 +175,15 @@ export function LoginScreen() {
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Masalan: owner yoki admin"
+                      placeholder={language === 'uz' ? "+998 90 123 45 67 yoki owner" : "+998 90 123 45 67 или owner"}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-10 pr-3.5 py-2.5 text-xs sm:text-sm text-slate-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-slate-800 dark:bg-slate-800/80 dark:text-white dark:focus:border-brand-500 dark:focus:bg-slate-900"
                     />
                   </div>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    {language === 'uz' 
+                      ? "O'quvchilar: Login = Telefon raqam, Parol = Admin bergan parol" 
+                      : "Ученики: Логин = Номер телефона, Пароль = Выданный админом"}
+                  </p>
                 </div>
 
                 <div>

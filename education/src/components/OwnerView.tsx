@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { mockGroups, mockStudents, mockTeachers, mockPayments } from '../data/mockData';
+import { formatMoney } from '../lib/format';
 import {
   Users,
   GraduationCap,
@@ -117,7 +118,7 @@ export function OwnerView() {
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {totalRevenue.toLocaleString()} UZS
+            {formatMoney(totalRevenue)} UZS
           </div>
           <div className="mt-1 text-xs text-emerald-600 font-medium flex items-center gap-1">
             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -136,7 +137,7 @@ export function OwnerView() {
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-rose-600 dark:text-rose-400">
-            {totalDebt.toLocaleString()} UZS
+            {formatMoney(totalDebt)} UZS
           </div>
           <div className="mt-1 text-xs text-rose-500">
             3 ta o'quvchida to'lov muddati o'tgan

@@ -290,3 +290,92 @@ class CompanyMemberAdmin(admin.ModelAdmin):
     list_filter = ['role', 'is_active', 'company']
     search_fields = ['user__email', 'user__full_name', 'company__name']
     autocomplete_fields = ['company', 'user']
+
+# ==============================================================================
+# REAL DASHBOARD OVERRIDE FOR DJANGO ADMIN SITE
+# ==============================================================================
+from decimal import Decimal
+from django.db import models
+
+original_admin_index = admin.site.index
+
+def custom_admin_index(request, extra_context=None):
+    today = timezone.localdate()
+
+    # 1. Organization KPIs
+    total_orgs = Company.objects.count()
+    active_orgs = Company.objects.filter(status=Company.STATUS_ACTIVE, is_active=True).count()
+    suspended_orgs = Company.objects.filter(status=Company.STATUS_SUSPENDED).count()
+
+    retail_orgs = Company.objects.filter(business_type__code='retail_store').count()
+    edu_orgs = Company.objects.filter(business_type__code='education_center').count()
+
+    # 2. Financial & Debt Metrics
+    from apps.debts.models import DebtCustomer, DebtRecord, RepaymentRecord
+    from apps.identity.models import User
+
+    debt_stats = DebtCustomer.objects.aggregate(
+        total_balance=models.Sum('current_balance'),
+        active_debtors=models.Count('id', filter=models.Q(current_balance__gt=Decimal('0.00'))),
+        total_customers=models.Count('id'),
+    )
+    total_debt_amount = debt_stats['total_balance'] or Decimal('0.00')
+    active_debtors_count = debt_stats['active_debtors'] or 0
+    total_customers_count = debt_stats['total_customers'] or 0
+
+    today_collections = RepaymentRecord.objects.filter(created_at__date=today).aggregate(
+        total=models.Sum('amount')
+    )['total'] or Decimal('0.00')
+
+    # 3. System Modules & Users
+    total_modules = Module.objects.count()
+    active_modules = Module.objects.filter(is_active=True).count()
+    total_users = User.objects.count()
+
+    # 4. Detailed lists for dashboard widgets
+    dashboard_orgs = Company.objects.select_related('business_type').prefetch_related(
+        'module_entitlements__module'
+    ).order_by('-created_at')[:8]
+
+    recent_debts = DebtRecord.objects.select_related(
+        'customer', 'company', 'recorded_by'
+    ).order_by('-created_at')[:6]
+
+    recent_repayments = RepaymentRecord.objects.select_related(
+        'customer', 'company', 'recorded_by'
+    ).order_by('-created_at')[:6]
+
+    recent_audits = AuditEvent.objects.select_related(
+        'actor', 'company'
+    ).order_by('-created_at')[:8]
+
+    business_types_list = BusinessType.objects.prefetch_related(
+        'module_mappings__module'
+    ).all()
+
+    dashboard_context = {
+        'total_orgs': total_orgs,
+        'active_orgs': active_orgs,
+        'suspended_orgs': suspended_orgs,
+        'retail_orgs': retail_orgs,
+        'edu_orgs': edu_orgs,
+        'total_debt_amount': f"{total_debt_amount:,.2f}",
+        'today_collections': f"{today_collections:,.2f}",
+        'active_debtors_count': active_debtors_count,
+        'total_customers_count': total_customers_count,
+        'total_modules': total_modules,
+        'active_modules': active_modules,
+        'total_users': total_users,
+        'dashboard_orgs': dashboard_orgs,
+        'recent_debts': recent_debts,
+        'recent_repayments': recent_repayments,
+        'recent_audits': recent_audits,
+        'business_types_list': business_types_list,
+    }
+
+    extra_context = extra_context or {}
+    extra_context.update(dashboard_context)
+    return original_admin_index(request, extra_context=extra_context)
+
+admin.site.index = custom_admin_index
+

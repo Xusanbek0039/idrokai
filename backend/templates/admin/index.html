@@ -1,0 +1,293 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div class="real-dashboard">
+  <!-- Top Welcome Banner -->
+  <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 28px 32px; border-radius: 16px; margin-bottom: 28px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span style="background: #10b981; color: #fff; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">IDROK AI v1.0</span>
+        <span style="color: #94a3b8; font-size: 13px;">Universal Modular Multi-Tenant Platform</span>
+      </div>
+      <h1 style="font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -0.02em;">Platform Super Admin Dashboard</h1>
+      <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 14px;">Barcha tashkilotlar, modullar, moliyaviy oqimlar va tizim xavfsizligini yagona markazdan boshqaring.</p>
+    </div>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <a href="/admin/tenancy/company/add/" style="background: #10b981; color: #fff; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);">
+        <span>+</span> Yangi Do'kon Qo'shish
+      </a>
+      <a href="/admin/tenancy/module/" style="background: #334155; color: #fff; text-decoration: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;">
+        🧩 Modullar Markazi
+      </a>
+      <a href="http://127.0.0.1:3000/debts" target="_blank" style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); text-decoration: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;">
+        ↗ Business POS UI
+      </a>
+    </div>
+  </div>
+
+  <!-- 4 Main KPI Cards -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-bottom: 28px;">
+    <!-- Card 1: Organizations -->
+    <div style="background: #fff; padding: 24px; border-radius: 14px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); position: relative; overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Tashkilotlar (Do'konlar)</div>
+          <div style="font-size: 32px; font-weight: 800; color: #0f172a; margin: 8px 0 4px 0;">{{ total_orgs }} ta</div>
+          <div style="color: #10b981; font-size: 12px; font-weight: 600;">● {{ active_orgs }} ta faol {% if suspended_orgs %}<span style="color: #ef4444; margin-left: 6px;">● {{ suspended_orgs }} to'xtatilgan</span>{% endif %}</div>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 12px; background: #ecfdf5; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+          🏢
+        </div>
+      </div>
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; font-size: 11px; color: #64748b;">
+        <span>Retail: <b>{{ retail_orgs }}</b></span>
+        <span>Education: <b>{{ edu_orgs }}</b></span>
+      </div>
+    </div>
+
+    <!-- Card 2: Total Debt -->
+    <div style="background: #fff; padding: 24px; border-radius: 14px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); position: relative; overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Umumiy Nasiya Qarz (Platform)</div>
+          <div style="font-size: 28px; font-weight: 800; color: #dc2626; margin: 8px 0 4px 0;">{{ total_debt_amount }} <span style="font-size: 14px; color: #64748b; font-weight: 600;">UZS</span></div>
+          <div style="color: #ef4444; font-size: 12px; font-weight: 600;">{{ active_debtors_count }} ta qarzdor mijoz hisobida</div>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 12px; background: #fef2f2; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+          💳
+        </div>
+      </div>
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #64748b;">
+        Jami ro'yxatga olingan mijozlar: <b>{{ total_customers_count }} ta</b>
+      </div>
+    </div>
+
+    <!-- Card 3: Today's Collections -->
+    <div style="background: #fff; padding: 24px; border-radius: 14px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); position: relative; overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Bugungi Jami Tushumlar</div>
+          <div style="font-size: 28px; font-weight: 800; color: #16a34a; margin: 8px 0 4px 0;">{{ today_collections }} <span style="font-size: 14px; color: #64748b; font-weight: 600;">UZS</span></div>
+          <div style="color: #16a34a; font-size: 12px; font-weight: 600;">Bugun kassaga kelib tushgan to'lovlar</div>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 12px; background: #f0fdf4; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+          💰
+        </div>
+      </div>
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #64748b;">
+        Barcha do'konlar bo'yicha markaziy kassa yig'indisi
+      </div>
+    </div>
+
+    <!-- Card 4: System Modules -->
+    <div style="background: #fff; padding: 24px; border-radius: 14px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); position: relative; overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Tizim Modullari & Foydalanuvchilar</div>
+          <div style="font-size: 32px; font-weight: 800; color: #2563eb; margin: 8px 0 4px 0;">{{ active_modules }} / {{ total_modules }}</div>
+          <div style="color: #2563eb; font-size: 12px; font-weight: 600;">{{ total_users }} ta xodim va admin ro'yxatda</div>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 12px; background: #eff6ff; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+          🧩
+        </div>
+      </div>
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #64748b;">
+        Katalog: Retail (6) | Education (8)
+      </div>
+    </div>
+  </div>
+
+  <!-- Organizations Control Center Table -->
+  <div style="background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); margin-bottom: 28px; overflow: hidden;">
+    <div style="padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h2 style="font-size: 18px; font-weight: 800; margin: 0; color: #0f172a;">Tashkilotlar Boshqaruvi (Organizations Management)</h2>
+        <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Platformada ro'yxatdan o'tgan barcha bizneslar, ularning faol modullari va holati</p>
+      </div>
+      <a href="/admin/tenancy/company/" style="color: #10b981; text-decoration: none; font-size: 13px; font-weight: 700;">
+        Barchasini ko'rish ({% if total_orgs %}{{ total_orgs }}{% else %}0{% endif %}) →
+      </a>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+        <thead style="background: #f8fafc; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;">
+          <tr>
+            <th style="padding: 12px 20px;">Tashkilot Nomi</th>
+            <th style="padding: 12px 20px;">Biznes Turi</th>
+            <th style="padding: 12px 20px;">Holat</th>
+            <th style="padding: 12px 20px;">Yoqilgan Modullar</th>
+            <th style="padding: 12px 20px;">Valyuta</th>
+            <th style="padding: 12px 20px; text-align: right;">Amallar</th>
+          </tr>
+        </thead>
+        <tbody style="divide-y: 1px solid #f1f5f9;">
+          {% for org in dashboard_orgs %}
+          <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+            <td style="padding: 14px 20px; font-weight: 700; color: #0f172a;">
+              <a href="/admin/tenancy/company/{{ org.id }}/change/" style="color: #0f172a; text-decoration: none;">
+                {{ org.name }}
+              </a>
+              {% if org.phone %}<div style="font-size: 11px; color: #64748b; font-weight: normal;">{{ org.phone }}</div>{% endif %}
+            </td>
+            <td style="padding: 14px 20px;">
+              {% if org.business_type %}
+                <span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;">
+                  {{ org.business_type.name }}
+                </span>
+              {% else %}
+                <span style="color: #94a3b8;">—</span>
+              {% endif %}
+            </td>
+            <td style="padding: 14px 20px;">
+              {% if org.status == 'active' %}
+                <span style="background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">Faol</span>
+              {% elif org.status == 'suspended' %}
+                <span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">To'xtatilgan</span>
+              {% else %}
+                <span style="background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">{{ org.status }}</span>
+              {% endif %}
+            </td>
+            <td style="padding: 14px 20px;">
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                {% for ent in org.module_entitlements.all %}
+                  {% if ent.is_enabled %}
+                    <span style="background: #f1f5f9; color: #334155; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+                      {{ ent.module.code }}
+                    </span>
+                  {% endif %}
+                {% empty %}
+                  <span style="color: #94a3b8; font-size: 11px;">Modullar belgilanmagan</span>
+                {% endfor %}
+              </div>
+            </td>
+            <td style="padding: 14px 20px; font-weight: 600; color: #475569;">
+              {{ org.currency }}
+            </td>
+            <td style="padding: 14px 20px; text-align: right;">
+              <a href="/admin/tenancy/company/{{ org.id }}/change/" style="background: #f1f5f9; color: #0f172a; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 4px;">
+                Tahrirlash
+              </a>
+              <a href="http://127.0.0.1:3000/debts" target="_blank" style="background: #10b981; color: #fff; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;">
+                POS
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="padding: 32px; text-align: center; color: #94a3b8;">
+              Tashkilotlar mavjud emas. <a href="/admin/tenancy/company/add/" style="color: #10b981; font-weight: 600;">Birinchi do'konni qo'shing →</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Two Columns: Financial Operations & Modules Catalog -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 24px; margin-bottom: 28px;">
+    <!-- Recent Debts & Repayments -->
+    <div style="background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 20px 24px; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 800; margin: 0; color: #0f172a;">So'nggi Nasiyalar & To'lovlar (POS)</h3>
+        <a href="/admin/debts/debtrecord/" style="color: #10b981; font-size: 12px; font-weight: 700; text-decoration: none;">Jurnal →</a>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        {% for d in recent_debts %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f8fafc; border-radius: 8px; font-size: 13px;">
+          <div>
+            <div style="font-weight: 700; color: #0f172a;">{{ d.customer.full_name }}</div>
+            <div style="font-size: 11px; color: #64748b;">{{ d.company.name }} • {{ d.description|truncatewords:4 }}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: 800; color: #dc2626;">+{{ d.amount }} UZS</div>
+            <div style="font-size: 10px; color: #94a3b8;">{{ d.created_at|date:"d.m.Y H:i" }}</div>
+          </div>
+        </div>
+        {% empty %}
+        <div style="text-align: center; color: #94a3b8; padding: 16px;">Nasiyalar mavjud emas.</div>
+        {% endfor %}
+
+        {% for r in recent_repayments %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #ecfdf5; border-radius: 8px; font-size: 13px;">
+          <div>
+            <div style="font-weight: 700; color: #0f172a;">{{ r.customer.full_name }}</div>
+            <div style="font-size: 11px; color: #059669;">{{ r.company.name }} • To'lov ({{ r.payment_method }})</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: 800; color: #16a34a;">-{{ r.amount }} UZS</div>
+            <div style="font-size: 10px; color: #94a3b8;">{{ r.created_at|date:"d.m.Y H:i" }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- System Modules Catalog -->
+    <div style="background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 20px 24px; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 800; margin: 0; color: #0f172a;">Biznes Turlari & Modul Matritsasi</h3>
+        <a href="/admin/tenancy/module/" style="color: #10b981; font-size: 12px; font-weight: 700; text-decoration: none;">Barcha Modullar →</a>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        {% for bt in business_types_list %}
+        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 800; color: #0f172a; font-size: 14px;">{{ bt.name }}</span>
+            <span style="font-size: 11px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace;">{{ bt.code }}</span>
+          </div>
+          <p style="font-size: 12px; color: #64748b; margin: 0 0 10px 0;">{{ bt.description|truncatewords:15 }}</p>
+
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            {% for m in bt.module_mappings.all %}
+              <span style="background: {% if m.is_mandatory %}#fee2e2; color: #991b1b;{% elif m.is_default %}#dcfce7; color: #166534;{% else %}#f1f5f9; color: #475569;{% endif %} padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;">
+                {{ m.module.name }} {% if m.is_mandatory %}*(Majburiy){% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- All System Management Apps / Models Grid -->
+  <div style="background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 20px 24px; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); margin-bottom: 28px;">
+    <h3 style="font-size: 16px; font-weight: 800; margin: 0 0 16px 0; color: #0f172a;">Tizim Boshqaruv Bo'limlari (System Models Directory)</h3>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+      {% for app in app_list %}
+      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #f8fafc;">
+        <div style="font-weight: 800; color: #0f172a; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; display: flex; justify-content: space-between;">
+          <span>{{ app.name }}</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          {% for model in app.models %}
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0;">
+            {% if model.admin_url %}
+              <a href="{{ model.admin_url }}" style="color: #0f172a; text-decoration: none; font-weight: 600;">{{ model.name }}</a>
+            {% else %}
+              <span style="color: #0f172a; font-weight: 600;">{{ model.name }}</span>
+            {% endif %}
+
+            <div style="display: flex; gap: 4px;">
+              {% if model.add_url %}
+                <a href="{{ model.add_url }}" style="background: #10b981; color: #fff; text-decoration: none; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">+</a>
+              {% endif %}
+              {% if model.admin_url %}
+                <a href="{{ model.admin_url }}" style="background: #e2e8f0; color: #334155; text-decoration: none; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">Ko'rish</a>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

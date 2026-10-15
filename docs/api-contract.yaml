@@ -1,0 +1,883 @@
+openapi: 3.0.3
+info:
+  title: IDROK AI MVP API
+  version: 0.1.0
+  description: |
+    Proposed contract, awaiting approval; no implementation is implied.
+    Same-origin session authentication. Fetch /auth/csrf and send X-CSRFToken
+    on every unsafe request, including login and registration. All company paths
+    require active membership; foreign-company resources return 404. Owner/admin
+    manage memberships and knowledge; all members manage contacts/tasks and chat.
+    Only owners may grant/revoke ownership; a company must retain an owner.
+    Unknown input properties are rejected. All timestamps use UTC RFC3339.
+    Idempotency keys are retained 24 hours, scoped by user/company/route/body hash.
+    Matching retries replay the response; changed or pending duplicates return 409.
+    Default error responses cover 400, 401, 403, 404, 409, 413, 415, 429 and 503
+    with the Error schema; throttled responses include Retry-After seconds.
+servers:
+  - url: /api/v1
+security:
+  - sessionAuth: []
+paths:
+  /auth/csrf:
+    get:
+      operationId: getCsrf
+      security: []
+      summary: Bootstrap CSRF cookie and token
+      responses:
+        '200':
+          description: Token for X-CSRFToken; also sets CSRF cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrf_token]
+                properties:
+                  csrf_token: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/register:
+    post:
+      operationId: register
+      security: []
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      summary: Register and queue email verification; does not create a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password, name]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, format: password, minLength: 12, maxLength: 128}
+                name: {type: string, minLength: 1, maxLength: 150}
+      responses:
+        '202': {description: Generic verification instructions; does not reveal email existence}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      security: []
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody: {$ref: '#/components/requestBodies/Token'}
+      responses:
+        '204': {description: Email verified; token consumed}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/login:
+    post:
+      operationId: login
+      security: []
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: Verified user authenticated; rotates and sets sessionid cookie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/logout:
+    post:
+      operationId: logout
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Session invalidated}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/me:
+    get:
+      operationId: getMe
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies:
+    get:
+      operationId: listCompanies
+      summary: List companies where current user is an active member
+      responses:
+        '200':
+          description: Membership-scoped companies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Company'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createCompany
+      summary: Verified user creates company and owner membership atomically
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompanyInput'}
+      responses:
+        '201':
+          description: Company created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Company'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: getCompany
+      responses:
+        '200':
+          description: Current company
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Company'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      operationId: updateCompany
+      summary: Owner updates company settings
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: {type: string, minLength: 1, maxLength: 200}
+                timezone: {type: string, description: Valid IANA timezone}
+      responses:
+        '200':
+          description: Updated company
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Company'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/memberships:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: listMemberships
+      summary: List active company members for task assignment
+      responses:
+        '200':
+          description: Active members (pilot maximum 50)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Membership'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/memberships/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+      - {$ref: '#/components/parameters/Id'}
+    patch:
+      operationId: changeMembershipRole
+      summary: Owner/admin changes role within own authority; preserve last owner
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: {$ref: '#/components/schemas/Role'}
+      responses:
+        '200':
+          description: Updated membership
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Membership'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: removeMembership
+      summary: Owner/admin deactivates member within role limits; preserve last owner
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Membership deactivated; assigned tasks become unassigned}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/invitations:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    post:
+      operationId: inviteMember
+      summary: Owner/admin invites an email; only owner may invite an owner
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, role]
+              properties:
+                email: {type: string, format: email}
+                role: {$ref: '#/components/schemas/Role'}
+      responses:
+        '202':
+          description: Invitation persisted; email queued; expires in 72 hours
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, expires_at]
+                properties:
+                  id: {type: string, format: uuid}
+                  expires_at: {type: string, format: date-time}
+        default: {$ref: '#/components/responses/Error'}
+  /invitations/accept:
+    post:
+      operationId: acceptInvitation
+      summary: Single-use token must match authenticated verified email
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody: {$ref: '#/components/requestBodies/Token'}
+      responses:
+        '200':
+          description: Membership activated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Membership'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/contacts:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: listContacts
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+        - name: search
+          in: query
+          schema: {type: string, maxLength: 200}
+        - name: include_archived
+          in: query
+          schema: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Contacts ordered by created_at descending, id descending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items: {$ref: '#/components/schemas/Contact'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createContact
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/ContactInput'}
+                - required: [name]
+      responses:
+        '201':
+          description: Created contact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Contact'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/contacts/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+      - {$ref: '#/components/parameters/Id'}
+    get:
+      operationId: getContact
+      responses:
+        '200':
+          description: Contact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Contact'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      operationId: updateContact
+      summary: Update contact; set archived=true to archive
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ContactInput'}
+      responses:
+        '200':
+          description: Updated contact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Contact'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/tasks:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: listTasks
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/TaskStatus'}
+        - name: assignee_id
+          in: query
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Tasks ordered by created_at descending, id descending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items: {$ref: '#/components/schemas/Task'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createTask
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/TaskInput'}
+                - required: [title]
+      responses:
+        '201':
+          description: Created task; default status todo
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Task'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/tasks/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+      - {$ref: '#/components/parameters/Id'}
+    get:
+      operationId: getTask
+      responses:
+        '200':
+          description: Task
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Task'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      operationId: updateTask
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskInput'}
+      responses:
+        '200':
+          description: Updated task; entering done sets completed_at, leaving done clears it
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Task'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/documents:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: listDocuments
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Documents ordered by created_at descending, id descending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items: {$ref: '#/components/schemas/Document'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: uploadDocument
+      summary: Owner/admin uploads PDF, TXT, Markdown; maximum 10 MiB
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, file]
+              properties:
+                title: {type: string, minLength: 1, maxLength: 200}
+                file: {type: string, format: binary, description: Maximum 10485760 bytes; validated by content}
+      responses:
+        '202':
+          description: Ingestion queued; poll Location
+          headers:
+            Location: {schema: {type: string}, description: Company-scoped document detail URL}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Document'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/documents/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+      - {$ref: '#/components/parameters/Id'}
+    get:
+      operationId: getDocument
+      responses:
+        '200':
+          description: Document and ingestion status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Document'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: removeDocument
+      summary: Owner/admin immediately excludes document from retrieval and queues erasure
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Hidden immediately; physical cleanup asynchronous}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/conversations:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: listConversations
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Company-visible conversations ordered by created_at descending, id descending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items: {$ref: '#/components/schemas/Conversation'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createConversation
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title]
+              properties:
+                title: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/conversations/{id}/messages:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+      - {$ref: '#/components/parameters/Id'}
+    get:
+      operationId: listMessages
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Messages ordered by created_at ascending, id ascending; inaccessible source content suppressed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items: {$ref: '#/components/schemas/Message'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: submitMessage
+      summary: Persist user message and queue answer; one active run per conversation, otherwise 409
+      parameters:
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [content]
+              properties:
+                content: {type: string, minLength: 1, maxLength: 8000}
+      responses:
+        '202':
+          description: Accepted after quota reservation; poll Location
+          headers:
+            Location: {schema: {type: string}, description: Company-scoped assistant-run URL}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantRun'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/assistant-runs/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+      - {$ref: '#/components/parameters/Id'}
+    get:
+      operationId: getAssistantRun
+      summary: Poll at most once per two seconds; queued/running transition to succeeded/failed
+      responses:
+        '200':
+          description: Durable run status; successful output also appears in conversation messages
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantRun'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/audit-events:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: listAuditEvents
+      summary: Owner/admin only; read-only metadata
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Events ordered by created_at descending, id descending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items: {$ref: '#/components/schemas/AuditEvent'}
+        default: {$ref: '#/components/responses/Error'}
+  /companies/{company_id}/usage:
+    parameters:
+      - {$ref: '#/components/parameters/CompanyId'}
+    get:
+      operationId: getUsage
+      summary: Owner/admin current calendar-month usage in UTC
+      responses:
+        '200':
+          description: Usage and enforced internal quota; not an invoice
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period_start, period_end, input_tokens, output_tokens, reserved_tokens, token_limit]
+                properties:
+                  period_start: {type: string, format: date-time}
+                  period_end: {type: string, format: date-time}
+                  input_tokens: {type: integer, minimum: 0}
+                  output_tokens: {type: integer, minimum: 0}
+                  reserved_tokens: {type: integer, minimum: 0}
+                  token_limit: {type: integer, minimum: 0}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Server-side session; Secure, HttpOnly, SameSite=Lax
+  parameters:
+    CompanyId:
+      name: company_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Csrf:
+      name: X-CSRFToken
+      in: header
+      required: true
+      schema: {type: string}
+    Idempotency:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 8, maxLength: 128}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Offset:
+      name: offset
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+  requestBodies:
+    Token:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [token]
+            properties:
+              token: {type: string, minLength: 1, maxLength: 512}
+  responses:
+    Error:
+      description: Structured failure; HTTP status specifies category
+      headers:
+        X-Request-ID:
+          schema: {type: string}
+        Retry-After:
+          description: Seconds until retry; provided on 429 and temporary 503 where known
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code: {type: string, example: validation_error}
+        message: {type: string}
+        request_id: {type: string}
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items: {type: string}
+    Page:
+      type: object
+      required: [count, next, previous, results]
+      properties:
+        count: {type: integer, minimum: 0}
+        next: {type: string, nullable: true, description: Relative same-origin pagination URL}
+        previous: {type: string, nullable: true}
+        results:
+          type: array
+          items: {type: object}
+    User:
+      type: object
+      required: [id, email, name, email_verified]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        name: {type: string}
+        email_verified: {type: boolean}
+    Role:
+      type: string
+      enum: [owner, admin, staff]
+    CompanyInput:
+      type: object
+      additionalProperties: false
+      required: [name, industry, timezone]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        industry: {type: string, enum: [general, clinic, education, retail, hospitality]}
+        timezone: {type: string, example: Asia/Tashkent, description: Valid IANA timezone}
+    Company:
+      type: object
+      required: [id, name, industry, timezone, my_role, enabled_modules, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        industry: {type: string, enum: [general, clinic, education, retail, hospitality]}
+        timezone: {type: string}
+        my_role: {$ref: '#/components/schemas/Role'}
+        enabled_modules:
+          type: array
+          items: {type: string, enum: [crm, work, knowledge, assistant]}
+        created_at: {type: string, format: date-time}
+    Membership:
+      type: object
+      required: [id, company_id, user_id, display_name, role]
+      properties:
+        id: {type: string, format: uuid}
+        company_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        display_name: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+    ContactInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        email: {type: string, format: email, nullable: true}
+        phone: {type: string, maxLength: 32, nullable: true}
+        category: {type: string, maxLength: 80, nullable: true}
+        notes: {type: string, maxLength: 4000}
+        archived: {type: boolean}
+    Contact:
+      type: object
+      required: [id, company_id, name, archived, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        company_id: {type: string, format: uuid}
+        name: {type: string}
+        email: {type: string, format: email, nullable: true}
+        phone: {type: string, nullable: true}
+        category: {type: string, nullable: true}
+        notes: {type: string}
+        archived: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done, cancelled]
+    TaskInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 4000}
+        contact_id: {type: string, format: uuid, nullable: true}
+        assignee_id: {type: string, format: uuid, nullable: true, description: Active company membership ID}
+        due_at: {type: string, format: date-time, nullable: true}
+        status: {$ref: '#/components/schemas/TaskStatus'}
+    Task:
+      type: object
+      required: [id, company_id, title, status, created_at, updated_at, completed_at]
+      properties:
+        id: {type: string, format: uuid}
+        company_id: {type: string, format: uuid}
+        title: {type: string}
+        description: {type: string}
+        contact_id: {type: string, format: uuid, nullable: true}
+        assignee_id: {type: string, format: uuid, nullable: true}
+        due_at: {type: string, format: date-time, nullable: true}
+        status: {$ref: '#/components/schemas/TaskStatus'}
+        completed_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    Document:
+      type: object
+      required: [id, company_id, title, version, status, error_code, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        company_id: {type: string, format: uuid}
+        title: {type: string}
+        version: {type: integer, minimum: 1}
+        status: {type: string, enum: [queued, processing, ready, failed]}
+        error_code: {type: string, nullable: true, description: Safe code; e.g. unsupported_content or ingestion_failed}
+        created_at: {type: string, format: date-time}
+    Conversation:
+      type: object
+      required: [id, company_id, title, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        company_id: {type: string, format: uuid}
+        title: {type: string}
+        created_at: {type: string, format: date-time}
+    Citation:
+      type: object
+      required: [document_id, document_version, chunk_id, title, excerpt]
+      properties:
+        document_id: {type: string, format: uuid}
+        document_version: {type: integer, minimum: 1}
+        chunk_id: {type: string, format: uuid}
+        title: {type: string}
+        excerpt: {type: string, maxLength: 500}
+    Message:
+      type: object
+      required: [id, conversation_id, role, content, citations, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        role: {type: string, enum: [user, assistant]}
+        content: {type: string, description: Removed-source answers may be replaced by a source-unavailable notice}
+        citations:
+          type: array
+          items: {$ref: '#/components/schemas/Citation'}
+        created_at: {type: string, format: date-time}
+    AssistantRun:
+      type: object
+      required: [id, conversation_id, user_message_id, status, assistant_message_id, error_code, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        user_message_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, succeeded, failed]}
+        assistant_message_id: {type: string, format: uuid, nullable: true, description: Non-null on success}
+        error_code: {type: string, nullable: true, description: Non-null on failure; e.g. provider_timeout or membership_revoked}
+        created_at: {type: string, format: date-time}
+    AuditEvent:
+      type: object
+      required: [id, company_id, actor_user_id, action, resource_type, resource_id, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        company_id: {type: string, format: uuid}
+        actor_user_id: {type: string, format: uuid, nullable: true}
+        action: {type: string}
+        resource_type: {type: string}
+        resource_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}

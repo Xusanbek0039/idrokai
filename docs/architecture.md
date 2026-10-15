@@ -1,103 +1,314 @@
-# IDROK AI — Architecture
+# IDROK AI — Architecture Specification
 
-Status: proposed; approval required before implementation. See [PRD](PRD.md) and [API contract](api-contract.yaml).
+Status: Proposed Architecture Update; awaiting owner approval.  
+See: [PRD](PRD.md) and [API Contract](api-contract.yaml).  
+Initial Database: **SQLite3 (Local Development & First MVP)**  
+Target Production Database: **PostgreSQL (Planned Pre-Production Migration)**  
+First Business Module: **Shop Debt Management (Nasiya Savdo)**
 
-## Architectural decision
+---
 
-Use an API-first modular monolith: Django REST Framework owns domain rules and PostgreSQL persistence; Next.js with TypeScript and Tailwind CSS consumes the versioned HTTP contract. Celery runs durable asynchronous workloads using Redis as broker. PostgreSQL with pgvector stores tenant knowledge embeddings. Private file storage is an additional infrastructure dependency: filesystem volume for local development and an S3-compatible private bucket for production. Provider credentials remain server-side.
+## 1. Architectural Overview
 
-This minimizes distributed-system overhead while preserving explicit module boundaries. Extract services only when measured scaling or ownership needs justify them. No backend/frontend implementation, dependency installation, or deployment is part of this architecture phase.
+IDROK AI is an API-first modular monolith designed to deliver robust, multi-tenant business automation with minimal operational complexity. 
+
+The architecture strictly separates the backend domain authority and the frontend user interface:
+- **Backend**: Django REST Framework (DRF) running Python 3.12+, acting as the single domain authority, business rule engine, and transaction coordinator.
+- **Frontend**: Next.js 14+ (App Router, TypeScript, Tailwind CSS), consuming the versioned `/api/v1` HTTP contract with server-side session forwarding.
+- **Initial Database**: **SQLite3** configured as the default database for local development and the initial MVP release.
+- **Production Target Database**: **PostgreSQL** (with row-level locking and pgvector), scheduled for migration prior to multi-user production deployment.
 
 ```mermaid
-flowchart LR
-  Browser -->|same-origin HTTPS| Edge
-  Edge -->|pages| Next[Next.js UI]
-  Edge -->|/api/v1| API[Django REST Framework]
-  API --> PG[(PostgreSQL + pgvector)]
-  API --> Files[(Private file storage)]
-  API --> Redis[(Redis broker / cache)]
-  Worker[Celery workers] --> Redis
-  Worker --> PG
-  Worker --> Files
-  Worker --> Provider[OpenAI-compatible provider]
-  Worker --> Mail[Transactional email service]
+flowchart TD
+  subgraph Client Tier
+    Browser[Web Browser / Mobile POS]
+  end
+
+  subgraph Edge & Frontend Tier
+    Proxy[Reverse Proxy / Nginx]
+    Next[Next.js Frontend\nTypeScript + Tailwind CSS]
+  end
+
+  subgraph Backend Tier [Modular Monolith]
+    DRF[Django REST Framework API\nDomain Authority & RBAC]
+    Services[Application Services\nDebts, Tenancy, Ledger, Identity]
+    Atomic[transaction.atomic\nIdempotency & Balance Validation]
+  end
+
+  subgraph Storage Tier [Initial MVP: SQLite3]
+    SQLite[(SQLite3 Database\ndb.sqlite3 in WAL Mode)]
+    LocalFiles[(Local Private Storage\nShop attachments & documents)]
+  end
+
+  subgraph Production Migration Path [Planned]
+    PG[(PostgreSQL Database\nRow-Level Locking + RLS)]
+    PGVector[(pgvector Extension\nKnowledge Embeddings)]
+    Redis[(Redis Broker & Cache)]
+  end
+
+  Browser --> Proxy
+  Proxy -->|Page routes| Next
+  Proxy -->|/api/v1/*| DRF
+  Next -->|Server-side fetch /api/v1| DRF
+  DRF --> Services
+  Services --> Atomic
+  Atomic --> SQLite
+  DRF --> LocalFiles
+
+  SQLite -.->|Schema-compatible migration\nprior to concurrent production| PG
+  LocalFiles -.->|Planned S3/Cloud Storage| PGVector
 ```
 
-## Module boundaries
+---
 
-| Module | Ownership |
-| --- | --- |
-| identity | Users, verified email, server-side sessions, invitation acceptance |
-| tenancy | Companies, memberships, role checks, enabled modules, tenant context |
-| crm | Contacts and archive state |
-| work | Tasks, assignees, status transitions |
-| knowledge | Documents, versions, chunks, embeddings, ingestion lifecycle |
-| assistant | Conversations, messages, runs, retrieval, citations, provider adapter |
-| operations | Audit events, usage ledger, quotas, outbox and job recovery |
-| industries (later) | Separately enabled clinic, education, retail, hospitality domains |
+## 2. Database Strategy & SQLite3 Technical Requirements
 
-Modules call explicit application services; views and tasks do not bypass authorization. Shared code is limited to identifiers, error types, tenancy primitives, and observability. Industry entities reference core contacts through validated tenant relationships; do not turn the core into an unrestricted JSON entity system. Industry modules own their models, permissions, routes, migrations, and tests.
+### 2.1 Default Database Configuration
+The Django settings strictly configure SQLite3 as the default database for local development and the initial MVP:
 
-## Planned repository organization
+```python
+# backend/config/settings/base.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 20,  # 20-second busy timeout for write lock contention
+        },
+    }
+}
+```
 
-These directories are a proposal, not folders created in this phase:
+PostgreSQL is **not** configured or initialized in this phase.
+
+### 2.2 SQLite3 Optimization: WAL Mode and Pragma Settings
+By default, SQLite uses rollback journal mode, where any write locks the entire database file against all readers and writers. To optimize concurrency for the MVP, the connection is configured with **Write-Ahead Logging (WAL)**:
+
+```python
+# backend/config/db_init.py (connected via connection_created signal)
+from django.db.backends.signals import connection_created
+from django.dispatch import receiver
+
+@receiver(connection_created)
+def configure_sqlite_pragmas(sender, connection, **kwargs):
+    if connection.vendor == 'sqlite':
+        cursor = connection.cursor()
+        cursor.execute('PRAGMA journal_mode = WAL;')
+        cursor.execute('PRAGMA busy_timeout = 5000;')  # 5 seconds
+        cursor.execute('PRAGMA synchronous = NORMAL;')
+        cursor.execute('PRAGMA foreign_keys = ON;')
+```
+
+**Benefits in MVP**:
+- Readers do not block writers, and writers do not block readers.
+- Greatly reduces `database is locked` errors during cashier and management workflows.
+
+### 2.3 SQLite3 Write-Concurrency Limitations (Documented Risk)
+1. **Single-Writer Constraint**: SQLite only supports one active write transaction at a time across the entire database file. Even in WAL mode, multiple simultaneous writes will queue behind the database lock.
+2. **Lock Contention**: If a write transaction holds the lock longer than `busy_timeout` (5000 ms), subsequent writes will fail with `django.db.utils.OperationalError: database is locked`.
+3. **No Row-Level Locking**: SQLite does **not** support row-level locks. Running `select_for_update()` does not lock specific rows; it either acts as a no-op or attempts an immediate write lock on the entire database table/file.
+4. **Environment Suitability**: SQLite3 is ideal for single-developer environments, lightweight local testing, and single-cashier MVP pilots. It is **unsuitable** for high-volume multi-tenant production with concurrent financial transactions across many stores.
+
+### 2.4 Database-Agnostic Models and Future-Proof Schema Design
+To guarantee seamless migration to PostgreSQL without model refactoring:
+1. **Strict Standard Field Types**: Only standard Django ORM field types are permitted:
+   - Primary Keys: `models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`.
+   - Monetary Amounts: `models.DecimalField(max_digits=12, decimal_places=2)`. Never use `FloatField` or integer cents with custom math.
+   - Timestamps: `models.DateTimeField(auto_now_add=True)` and `models.DateTimeField(auto_now=True)` (UTC RFC3339).
+   - Text / Names: `models.CharField(max_length=...)` and `models.TextField()`.
+   - Structured Metadata: standard `models.JSONField(default=dict, blank=True)`.
+2. **Prohibited Features in MVP**:
+   - No PostgreSQL-specific fields (e.g., `ArrayField`, `HStoreField`, `CICharField`).
+   - No direct database-specific functions (e.g., PostgreSQL JSONB search operators `->>`, `?`).
+   - No database triggers or stored procedures.
+3. **Explicit Constraints**: Enforce uniqueness and relational integrity through Django `UniqueConstraint` and `CheckConstraint` declarations so migrations generate standard ANSI SQL constraints supported by both SQLite and PostgreSQL.
+
+---
+
+## 3. Financial Transaction Safety & Concurrency Architecture
+
+Because the MVP operates on SQLite without PostgreSQL row-level locks (`SELECT ... FOR UPDATE`), financial integrity is guaranteed through application-level patterns:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Client as Cashier / POS UI
+  participant API as DRF Debt Service
+  participant Idemp as Idempotency Store
+  participant DB as SQLite3 (WAL Mode)
+
+  Client->>API: POST /api/v1/companies/{id}/repayments<br/>Header: Idempotency-Key: {uuid}<br/>Payload: {customer_id, amount: "50000.00"}
+  
+  API->>Idemp: Check Idempotency-Key
+  alt Key already processed
+    Idemp-->>API: Return cached response
+    API-->>Client: 200 OK (Replayed original result)
+  else Key in progress
+    API-->>Client: 409 Conflict (Request in progress)
+  else New Request
+    API->>DB: Begin transaction.atomic()
+    Note over API,DB: Re-read Customer record & current balance
+    API->>API: Validate balance & repayment amount
+    API->>DB: Insert RepaymentRecord (DecimalField)
+    API->>DB: Insert DebtLedger entry (Immutable audit trail)
+    API->>DB: Update Customer balance (Atomic F() expression or verified delta)
+    API->>Idemp: Record Idempotency completion & response payload
+    API->>DB: Commit transaction.atomic()
+    DB-->>API: Transaction Committed
+    API-->>Client: 201 Created (Confirmed repayment & updated balance)
+  end
+```
+
+### 3.1 Strict Use of `transaction.atomic()`
+All operations that create debts, record repayments, adjust balances, or settle transactions must be executed within `transaction.atomic()`:
+- Either all records (debt record, ledger entry, customer balance update, audit log) commit successfully, or all changes roll back completely.
+- Keep the atomic block minimal: do not perform external network calls, file reading, or heavy processing inside `transaction.atomic()`.
+
+### 3.2 Idempotent Payment Processing
+Network retries and accidental cashier double-clicks are prevented by mandatory idempotency keys:
+- Every mutating debt and repayment endpoint requires an `Idempotency-Key` header (UUIDv4).
+- The key is scoped by `company_id`, `user_id`, endpoint route, and request payload hash, valid for 24 hours.
+- If a duplicate request arrives with the same key:
+  - If completed: returns the stored response payload immediately without re-executing transactions.
+  - If currently executing: returns `409 Conflict` (`"Transaction currently processing"`).
+- The `RepaymentRecord` and `DebtRecord` models store `idempotency_key` with a database unique constraint.
+
+### 3.3 Safe Balance Validation & Ledger Pattern
+- **Double-Entry / Ledger Principle**: Every balance-affecting event writes an immutable `DebtLedger` row containing: `company_id`, `customer_id`, `transaction_type` (`DEBT_ISSUED`, `REPAYMENT_RECEIVED`, `BALANCE_ADJUSTMENT`), `amount`, `balance_before`, `balance_after`, `reference_id`, and `created_at`.
+- **Atomic Recalculation**: Within `transaction.atomic()`, customer balances are safely updated using `F()` expressions or strict delta validations:
+  ```python
+  # Safe atomic balance update example
+  Customer.objects.filter(id=customer.id).update(
+      current_balance=models.F('current_balance') - repayment_amount
+  )
+  ```
+- **Credit Limit Verification**: Prior to debt creation, the customer's `current_balance + new_debt_amount` is checked against `credit_limit`. If exceeded, the transaction is rejected with `400 Bad Request` unless authorized by a Shop Manager or Shop Owner.
+
+---
+
+## 4. Module Boundaries & Responsibilities
+
+The codebase is organized as a modular monolith in `backend/apps/`:
+
+| Module | Directory | Ownership & Domain Boundaries |
+| --- | --- | --- |
+| **identity** | `backend/apps/identity` | Custom User model, email verification, session authentication, password security. |
+| **tenancy** | `backend/apps/tenancy` | Companies (Shops), Memberships, Role enforcement (**Platform Super Admin**, **Shop Owner**, **Shop Manager**, **Cashier**), tenant context middleware. |
+| **debts** | `backend/apps/debts` | **First Business Module**: Customer debtor profiles, debt issuance (`DebtRecord`), repayment tracking (`RepaymentRecord`), ledger transactions (`DebtLedger`), credit limit validation, idempotency guards. |
+| **crm** | `backend/apps/crm` | Customer contact directory, customer notes, address, phone lookup. |
+| **work** | `backend/apps/work` | Debt collection tasks, follow-up reminders, task assignment to cashiers/managers, due dates. |
+| **knowledge** | `backend/apps/knowledge` | Shop documentation, credit policy guides, text chunking (modular; vector search deferred). |
+| **assistant** | `backend/apps/assistant` | Internal AI assistant for querying shop credit policies and debt summaries (read-only; no autonomous financial mutations). |
+| **operations** | `backend/apps/operations` | Immutable audit log, daily settlement reports, cashier collection reconciliations. |
+
+### Role Hierarchy and Permissions Matrix
+
+| Action / Capability | Platform Super Admin | Shop Owner | Shop Manager | Cashier |
+| --- | :---: | :---: | :---: | :---: |
+| Provision new shop tenant | **Yes** | No | No | No |
+| Manage shop settings & memberships | No (Platform only) | **Yes** | No | No |
+| Adjust customer credit limits | No | **Yes** | **Yes** | No |
+| Issue customer debt ("Nasiya") | No | **Yes** | **Yes** | **Yes** |
+| Record customer repayment | No | **Yes** | **Yes** | **Yes** |
+| View customer debt balance & history | No | **Yes** | **Yes** | **Yes** |
+| Access shop financial summaries | No | **Yes** | **Yes** | No |
+| View cashier audit logs & settlement | No | **Yes** | **Yes** (own shift) | No |
+| Delete or reverse debt records | No | **Yes** (audit trail) | Requires Owner | No |
+
+---
+
+## 5. Planned Repository Organization
 
 ```text
-backend/config/              Django settings, routing, Celery setup
-backend/apps/{identity,tenancy,crm,work,knowledge,assistant,operations}/
-frontend/src/{app,features,components,lib}/
-frontend/src/lib/api/         Generated contract types and HTTP client
-infra/                       Docker and environment templates
-docs/                        PRD, architecture, API contract
+idrokai/
+├── docs/                             Shared project documentation
+│   ├── PRD.md                        Product requirements and acceptance criteria
+│   ├── architecture.md               This architecture specification
+│   └── api-contract.yaml             OpenAPI 3.1 specification for all endpoints
+├── backend/                          Django REST Framework API
+│   ├── manage.py
+│   ├── config/                       Django project settings and routing
+│   │   ├── __init__.py
+│   │   ├── asgi.py
+│   │   ├── wsgi.py
+│   │   ├── urls.py
+│   │   └── settings/
+│   │       ├── base.py               Common settings (SQLite3 default, DecimalField)
+│   │       ├── local.py              Local development settings (WAL pragmas)
+│   │       └── test.py               Test suite settings
+│   └── apps/
+│       ├── common/                   Shared base models (UUIDModel, TimeStampedModel)
+│       ├── identity/                 Authentication, User model
+│       ├── tenancy/                  Companies, Memberships, RBAC permissions
+│       ├── debts/                    Shop Debt Management (debts, repayments, ledger)
+│       ├── crm/                      Customer records
+│       ├── work/                     Follow-up tasks and debt reminders
+│       ├── knowledge/                Shop knowledge base
+│       ├── assistant/                AI assistant query adapter
+│       └── operations/               Audit events and idempotency records
+├── frontend/                         Next.js 14+ UI Application
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── tailwind.config.ts
+│   └── src/
+│       ├── app/                      Next.js App Router pages
+│       │   ├── (auth)/               Login, registration
+│       │   └── (dashboard)/          Authenticated shop dashboard
+│       │       ├── debts/            Debt management views (POS cashier, debtor list)
+│       │       ├── customers/        Customer directory
+│       │       ├── tasks/            Follow-up reminders
+│       │       └── settings/         Shop settings and members
+│       ├── components/               Reusable UI primitives
+│       ├── features/                 Feature-specific components (DebtCard, RepaymentModal)
+│       └── lib/
+│           ├── api/                  Generated API client and contract types
+│           └── auth/                 Session and CSRF handling
+└── AGENTS.md                         Collaboration rules and phase constraints
 ```
 
-## Tenant isolation and data model
+---
 
-Use one PostgreSQL database/shared schema initially. Each company-owned table has a non-null company_id, UUID primary key, timestamps, and suitable compound indexes starting with company_id. Global tables are users and server-side session/verification records. Membership joins user and company uniquely; invitations are tenant-owned.
+## 6. Pre-Production PostgreSQL Migration Plan
 
-All company APIs have `/companies/{company_id}/...` paths. Path selection is untrusted: authenticate, verify active membership and role, set transaction-local tenant context, then access data. Company IDs from request bodies are forbidden. Derive company_id server-side. Foreign IDs (contact, assignee, conversation, source document) must belong to that company. Return 404 for inaccessible tenant resources. Never authorize from a frontend company switcher or cached role alone.
+Prior to deploying IDROK AI for multi-user production with significant concurrent financial activity, the database will be migrated from SQLite3 to PostgreSQL. Because the models and schema are designed to be database-agnostic from day one, migration is clean and deterministic.
 
-Use explicit company-scoped ORM access plus PostgreSQL row-level security as defense in depth for tenant-owned tables. Migrations use a separate database owner. Runtime API/worker roles must not own tables or have BYPASSRLS; enable and force RLS. Policies fail closed without transaction-local company context. Global membership lookup is a narrowly scoped authorization operation restricted by authenticated user ID; it must not create a broad RLS bypass. All pooled connections reset context at transaction end. Integration tests exercise real runtime roles and missing context.
+### 6.1 Migration Prerequisites Checklist
+- [ ] Automated schema compatibility verification running against PostgreSQL in CI.
+- [ ] All financial models verified to use `DecimalField` (no float types).
+- [ ] Zero database-specific SQLite queries in application code.
+- [ ] Full backup of production SQLite3 database file taken.
 
-Worker payloads contain company_id and job ID; workers establish the same context, reload the job, and revalidate actor membership for user-initiated work before processing or delivering results. Internal maintenance jobs use explicit audited service identity and company scope. Cache keys, storage prefixes, queue deduplication keys, and rate limits include company_id. Private files have no public permanent URLs; downloads, if added, require current authorization and short-lived scoped access.
+### 6.2 Step-by-Step Migration Execution
+1. **Provision PostgreSQL**: Deploy managed PostgreSQL (v16+) with SSL enabled.
+2. **Schema Creation**: Run standard Django migrations against PostgreSQL:
+   ```bash
+   python manage.py migrate --database=postgresql
+   ```
+3. **Data Transfer**:
+   - For small datasets / MVP transition: use Django serialization:
+     ```bash
+     python manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.Permission > mvp_data.json
+     python manage.py loaddata mvp_data.json
+     ```
+   - For larger datasets: use `pgloader` with an automated migration script mapping SQLite tables to PostgreSQL schemas.
+4. **Enable PostgreSQL-Specific Concurrency Controls**:
+   - In DRF services, activate `select_for_update()` row-level locks on `Customer` balance rows during transaction execution.
+   - Configure connection pooling (PgBouncer) for high-frequency POS cashier connections.
+5. **Enable Row-Level Security (RLS)**:
+   - Apply PostgreSQL Row-Level Security policies on all tenant tables (`company_id = current_setting('app.current_company_id')`) as defense-in-depth behind application-layer tenancy checks.
+6. **Activate Vector Search (pgvector)**:
+   - Run `CREATE EXTENSION IF NOT EXISTS vector;`.
+   - Migrate knowledge chunks to native `VectorField` for enhanced AI search capabilities.
+7. **Verification & Cutover**:
+   - Run complete end-to-end financial test suite verifying customer balance reconciliations and ledger integrity.
+   - Switch application environment variable `DATABASE_URL` to PostgreSQL.
 
-Key relations: Company → Membership/Invitation/Contact/Task/Document/Conversation/AuditEvent/UsageEvent; Document → Chunk; Conversation → Message/AssistantRun; AssistantRun → citations referencing immutable document version and chunk IDs. A task optionally references a contact and assignee membership. Enforce tenant consistency with compound constraints where possible, plus service validation. Use a unique owner-preservation transaction/lock to prevent concurrent removal of all owners.
+---
 
-## Authentication and API conventions
+## 7. Verification and Testing Gates
 
-Use Django server-side sessions via Secure, HttpOnly, SameSite=Lax cookies behind a same-origin reverse proxy. `/auth/csrf` bootstraps CSRF; unsafe requests including login require X-CSRFToken and origin validation. Rotate session at login; logout invalidates it. No tokens in localStorage. Next.js server-side requests explicitly forward the session only to the trusted API and disable caching for authenticated company data. Cross-origin deployment is outside the MVP topology.
-
-Use `/api/v1`, JSON, UUIDs, UTC RFC3339 timestamps, ISO date filters, bounded limit/offset pagination, and structured errors with request_id. Validate all inputs and disallow unknown fields. PATCH updates are partial. GET is side-effect free. Use 401 for unauthenticated, 403 for insufficient role within a visible company, 404 for inaccessible records, 409 for conflicts, 413 for oversized upload, 415 for unsupported type, 429 for throttling/quotas, and 503 for unavailable dependencies. Never return stack traces. OpenAPI is the source of truth; schema generation and breaking-change checks are future CI gates.
-
-## Asynchronous execution and consistency
-
-Document upload and assistant messages create persisted jobs and return 202 with a polling URL. Persist records and an outbox event in one database transaction; a dispatcher publishes to Celery and marks delivery. A scheduled recovery loop republishes undelivered events and marks deadline-expired jobs failed. Redis is not the authoritative job store. Celery delivery is at least once; handlers use durable status transitions and leases, with bounded retries/backoff only for transient failures. Poison jobs become failed with a safe error code. Separate ingestion, assistant, and email queues prevent ingestion from starving chat.
-
-Require Idempotency-Key for company creation, invitations, uploads, and message submission. Scope stored keys by authenticated user, company (when present), route, and body hash for 24 hours. Replay the original response for the same request; return 409 for changed payloads or an in-progress duplicate. Enforce unique constraints in PostgreSQL. Async retries use the original job ID. Provider timeout may have incurred charges: do not blindly repeat ambiguous completions; mark failed/unknown and reconcile usage conservatively.
-
-## RAG and provider boundary
-
-1. Validate upload extension, actual MIME, size, and parser limits; quarantine bytes until scanning/validation completes. No arbitrary URL ingestion or remote-resource fetching.
-2. Extract text in a bounded worker, normalize, chunk, and compute embeddings through a configurable provider adapter. Store embedding model and dimension with each version; incompatible model changes require a separately built index and atomic activation.
-3. Publish chunks only when the whole version succeeds. Failed/removed documents are never searchable. Removal immediately hides chunks, then asynchronously erases files/vectors and invalidates caches.
-4. For a message, enforce company budgets and current membership, retrieve within company and active document versions, and send a bounded amount of context to the provider. MVP knowledge is readable by all active company members.
-5. Treat retrieved text as untrusted data. System instructions prohibit following document instructions or invoking tools. Answers include server-validated citation IDs and short excerpts; no fabricated source links. Recheck document visibility at result read time and suppress removed citations/content as necessary.
-6. Persist terminal answer/failed state, model identifier, tokens, duration, and usage reservation settlement. Low-evidence queries abstain. AI only answers knowledge questions; CRUD remains explicit user-controlled API actions.
-
-The provider adapter isolates completion, embedding, timeout, error translation, and usage handling; OpenAI compatibility is an interface assumption requiring capability checks. Select provider and models after approval. No model choice, pricing, or current third-party capability is asserted here.
-
-## Security, reliability, and operations
-
-Apply TLS, encrypted storage/backups, secret injection, restricted CORS/origins, upload scanning, dependency scanning, and tenant/user rate limits. Reserve AI quota transactionally before queueing to prevent concurrent budget overruns; finalize actual or conservative estimated usage on every terminal path. Log metadata with request/job/company IDs, redact PII and secrets, and audit membership, knowledge, contact, and task mutations. Audit events are append-only to application roles; privileged database access remains an operational trust boundary.
-
-PostgreSQL is authoritative; Redis cache loss is tolerable. Backups include database and private objects with a consistent recovery procedure. Track CRUD latency/error rate, queue age, job failure rate, AI latency/cost, ingestion failures, and denied tenant access. Use liveness/readiness checks without secrets; database/worker readiness gates rollout. Docker services proposed: edge, frontend, API, worker(s), scheduler/outbox dispatcher, PostgreSQL, Redis, and local private storage. Production topology and deployment remain unapproved.
-
-Apply the PRD's provisional deletion/backup retention policy only after owner confirmation. Company deletion/export and billing self-service are deferred; pilot deletion requests use an authenticated, audited operator procedure with explicit company scope. Do not onboard regulated sensitive records until requirements and hosting decisions are assessed.
-
-## Verification and evolution
-
-Future tests cover domain state changes, authentication/CSRF, every role, RLS under runtime DB roles, cross-company foreign IDs, cache/storage isolation, retries/outbox recovery, duplicate requests, removed citations, upload abuse, quotas, and RAG evaluation. Contract lint and backend/frontend conformance must pass before release. Implement in the PRD sequence. Later introduce industry modules, integrations, workflow actions with explicit approval policies, then billing. Avoid microservices and separate vector infrastructure until evidence requires them.
-
-## Discovery limitation
-
-Local repository inspection was blocked by process-runner initialization failure. Reconcile this proposed layout and policy with existing files before implementation; do not assume existing code meets these rules.
+1. **Monetary Precision Tests**: Unit tests assert that partial cent/tiyin calculations never produce floating point inaccuracies across 10,000 randomized debt and repayment simulations.
+2. **Idempotency Verification**: Automated test suite fires concurrent duplicate repayment requests with the same `Idempotency-Key`, verifying that exactly one repayment is written to SQLite and no double-crediting occurs.
+3. **Tenant Boundary Tests**: Automated test suite verifies that Cashiers or Managers in Shop A cannot view, query, or record transactions for customers in Shop B under any path or header combination (strict 404 response).
+4. **SQLite Concurrency & Lock Stress**: Stress testing cashier transaction frequency with WAL mode enabled to ensure the 5-second `busy_timeout` absorbs localized write spikes without raising uncaught `OperationalError`.
+5. **PostgreSQL Dual-Engine CI**: Continuous integration matrix verifies migrations and tests pass identically on both SQLite3 and PostgreSQL.

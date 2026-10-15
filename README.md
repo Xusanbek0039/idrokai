@@ -1,24 +1,56 @@
 # IDROK AI
 
-IDROK AI is a proposed universal AI-powered business automation SaaS for independent companies across clinics, education, retail, hospitality, and other industries.
+IDROK AI is a multi-tenant business automation platform built as an API-first modular monolith.
 
-**Status: architecture proposal awaiting approval.** This phase defines the MVP and API; it does not implement or deploy the application.
+The first business module is **Shop Debt Management (Nasiya Savdo / Daftari)**, designed for neighborhood shops and retail stores to digitize customer debt tracking, manage repayment collections, enforce credit limits, and maintain an immutable financial ledger.
 
-## Project documents
+**Status: Architecture Proposal Awaiting Approval.** Work is currently documentation-only. No backend/frontend code implementation, dependency installation, or deployment has been executed.
 
-- [Product requirements](docs/PRD.md): users, MVP scope, acceptance criteria, release gates, and open decisions.
-- [Architecture](docs/architecture.md): module boundaries, tenancy, security, RAG, asynchronous jobs, and planned repository structure.
-- [OpenAPI contract](docs/api-contract.yaml): proposed versioned HTTP API and data schemas.
-- [Agent collaboration rules](AGENTS.md): shared rules for Codex and Antigravity CLI.
+---
 
-## Proposed stack and MVP
+## Project Documentation
 
-Django REST Framework provides an API-first modular monolith. Next.js, TypeScript, and Tailwind CSS provide the UI. PostgreSQL with pgvector stores business records and knowledge vectors. Redis and Celery support asynchronous ingestion, AI responses, and invitation delivery. An OpenAI-compatible adapter isolates the AI provider; private file storage holds uploaded knowledge.
+- [Product Requirements (PRD)](docs/PRD.md): Problem statement, user roles, Shop Debt Management MVP scope, acceptance criteria, and quality release gates.
+- [Architecture Specification](docs/architecture.md): Modular monolith boundaries, SQLite3 configuration & WAL mode, financial transaction integrity, safe concurrency without `select_for_update()`, and PostgreSQL migration roadmap.
+- [OpenAPI Contract](docs/api-contract.yaml): Versioned HTTP REST API contract for authentication, tenancy, debtor customer management, debt issuance, and repayment processing.
+- [Agent Collaboration Rules](AGENTS.md): Shared workflow and constraints for Codex and Antigravity CLI.
 
-The MVP includes identity, company memberships and roles, contacts, follow-up tasks, uploaded knowledge, an internal assistant with citations, and usage/audit visibility. Tenant isolation applies across APIs, database policies, jobs, caches, files, and retrieval. Industry-specific operations, payment checkout, external messaging campaigns, and autonomous AI actions follow later.
+---
 
-## Development status
+## Architecture & Technology Stack
 
-No installation or startup commands are prescribed yet: dependency versions and environment configuration belong to the approved implementation phase. Repository inspection was blocked by a local command-runner initialization failure; the documents describe the intended design and must be reconciled with any existing implementation. Do not treat them as evidence of implemented behavior.
+- **Backend**: Django REST Framework (DRF) with Python 3.12+ (domain authority, business logic, RBAC, financial ledger).
+- **Frontend**: Next.js 14+ (TypeScript, Tailwind CSS, App Router) consuming `/api/v1` endpoints with secure server-side session management.
+- **Initial Database**: **SQLite3** for local development and the first MVP (`django.db.backends.sqlite3` with Write-Ahead Logging `PRAGMA journal_mode=WAL;`).
+- **Target Production Database**: **PostgreSQL** (with row-level locking and pgvector), planned for migration prior to multi-user production deployment with significant concurrent financial activity. PostgreSQL is **not** configured yet.
+- **Precision & Transaction Safety**:
+  - `DecimalField(max_digits=12, decimal_places=2)` for all monetary figures (debts, repayments, balances, credit limits).
+  - `transaction.atomic()` wrapping all debt and repayment operations.
+  - Safe concurrency and balance validation avoiding `select_for_update()` due to SQLite's lack of row-level locking.
+  - Mandatory `Idempotency-Key` headers on payment and debt endpoints to prevent double-charging or duplicate entries.
 
-Next: review the documents, select the pilot industry, confirm language/hosting/retention/provider/budget assumptions, and approve or amend the architecture. Implementation starts only after approval. Dependency installation, deployment, and Git commits were not authorized by this documentation task.
+---
+
+## Multi-Tenant Roles
+
+1. **Platform Super Admin**: Platform-wide administration, tenant onboarding, system health monitoring.
+2. **Shop Owner**: Tenant administrator; manages shop profile, invites and configures staff (Shop Managers, Cashiers), accesses complete financial summaries and audit trails.
+3. **Shop Manager**: Store manager; manages customer debtor profiles, approves credit limits, records debts/repayments, manages cashier follow-up tasks.
+4. **Cashier**: POS/counter operator; checks customer balances, issues new debts with notes/items, records repayments with receipts.
+
+---
+
+## Planned Repository Structure
+
+```text
+backend/              Django REST Framework API
+frontend/             Next.js, TypeScript, Tailwind CSS
+docs/                 Shared project documentation
+```
+
+---
+
+## Development Status & Next Steps
+
+1. Review and approve the updated architecture and OpenAPI specification.
+2. Upon explicit user approval, proceed to backend foundation setup, SQLite3 database initialization, and DRF Shop Debt Management models.

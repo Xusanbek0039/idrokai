@@ -1,133 +1,67 @@
-# IDROK AI — Roles & Permissions Specification
+# IDROK AI — Tenant Permissions Matrix
 
-**Status:** Proposed Architecture  
-**Scope:** Multi-Tenant Role-Based Access Control (RBAC) & Security Boundaries  
+Status: Proposed education extension; no runtime permissions changed.
 
----
+## 1. Shared security boundary
 
-## 1. Security Architecture & Boundary Model
+Reuse identity.User and CompanyMember (Membership alias). Membership is unique by company/user and has exactly one business-type-valid role in this proposal. Users can have different roles in different centers. A role is never global authority. Platform privileges come from the platform account flag and Django admin authorization, never from a tenant-editable role field.
 
-IDROK AI implements strict multi-tenant authorization governed by two independent security layers:
-1. **Platform Administration Boundary (Django Admin):** Accessible strictly to users with `is_platform_super_admin=True`. Completely isolated from the tenant API and Next.js frontend.
-2. **Tenant Scoped Authorization (DRF & Business Dashboard):** Every operational request requires an active `Membership` linking the authenticated `User` to the target `Organization`. Requests targeting resources outside the user's active membership return HTTP `404 Not Found` to prevent tenant probing.
+All education endpoints enforce active user + active membership + active company + eligible/effective module + action + object scope. Platform users need a real tenant membership for operational calls. Django platform metadata/entitlement management uses a separate audited control plane. The existing retail platform bypass is an observed implementation gap; this proposal does not alter retail code and must not copy it into education.
 
-```mermaid
-flowchart TD
-  subgraph Request Ingress
-    Req[Incoming HTTP Request]
-  end
+Foreign/missing membership and foreign or out-of-scope object IDs return 404. Same-tenant role denial returns 403 PERMISSION_DENIED. Disabled module returns 403 MODULE_DISABLED after tenant resolution. List filters are applied before pagination/aggregation. Validate nested objects and relation IDs, not only root rows. A client company_id is never trusted. Audit sensitive reads/exports without logging personal data, prompt bodies or answer keys.
 
-  subgraph Layer 1: Authentication & Global Flags
-    AuthCheck{User Authenticated?}
-    SuperCheck{is_platform_super_admin?}
-  end
+## 2. Education roles and explicit action scopes
 
-  subgraph Layer 2: Platform Admin Experience
-    PlatformConsole[Django Admin /platform-admin/\n• Global Organization Management\n• BusinessType & Module Catalog\n• Subscription Entitlements\n• Platform Audit Logs]
-  end
+Codes: edu_owner (Boshliq), edu_assistant_admin (Yordamchi admin), edu_operations_manager (Ish boshqaruvchi), teacher (O‘qituvchi), student (O‘quvchi). New education codes avoid renaming existing retail shop_owner/shop_manager/cashier/accountant values. No legacy org_manager/admin/accountant automatically acquires education privileges. A reviewed migration may map existing education memberships, but must preserve active ownership and audit every change. Existing owner/admin/staff values in the legacy proposed API remain for compatibility; they are not education grants.
 
-  subgraph Layer 3: Tenant Boundary & Membership
-    TenantMatch{Active Membership in\nRequested Organization?}
-    Deny404[404 Not Found\nAnti-probing Tenant Shield]
-  end
+A = entire center; G = currently assigned teaching groups; S = own linked student identity and permitted enrollments; — = denied. Every grant additionally needs the relevant module(s). Manage includes read, create, update/archive of mutable domain records; it never includes deletion/edit of immutable financial or published assessment records.
 
-  subgraph Layer 4: Feature Module Gate
-    ModuleCheck{Target Module Active in\nOrganizationModule?}
-    Deny403Module[403 Forbidden\nMODULE_DISABLED]
-  end
+| Action / capability key | Owner | Assistant Admin | Operations Manager | Teacher | Student |
+| --- | --- | --- | --- | --- | --- |
+| registry.read (students, teachers, groups, enrollment) | A | A | A | G minimal roster | S |
+| registry.manage (admit, enroll, staff profiles/groups) | A | A | A | — | — |
+| classrooms.read / schedules.read | A | A | A | G | S timetable only |
+| classrooms.manage / schedules.manage | A | A | A | — | — |
+| attendance.read | A | A | A | G | S |
+| attendance.manage | A | A | A | G | — |
+| tuition.read / tuition.manage (fee agreements, charges) | A | A | — | — | S read only |
+| payments.read / payments.post | A | A | — | — | S read only |
+| payments.reverse / tuition.discount | A | — | — | — | — |
+| homework.read / homework.manage (author, publish, grade) | A | A | A | G | S read published |
+| submissions.read | A | A | A | G | S |
+| submissions.submit | — | — | — | — | S |
+| exams.read / exams.manage (author, publish, grade) | A | A | A | G | S published learner view |
+| attempts.read / results.read | A | A | A | G | S (results only after release) |
+| attempts.start / attempts.submit | — | — | — | — | S assigned published tests |
+| videos.read / videos.manage | A | A | A | G | S read assigned published |
+| progress.read | A | A | A | G | S |
+| progress.record | — | — | — | — | S |
+| gamification.read | A | A | A | G | S balances; scoped leaderboard |
+| gamification.grant / gamification.reverse | A | — | — | — | — |
+| rewards.manage | A | — | A | — | — |
+| redemptions.read | A | A | A | G | S |
+| redemptions.redeem | — | — | — | — | S |
+| reports.academic | A | A | A | G | — |
+| reports.finance | A | A | — | — | — |
+| memberships.manage | A | limited below | — | — | — |
+| organization.manage / audit.read | A | — | — | — | — |
+| modules.read (capabilities) | own | own | own | own | own |
+| modules.change | — | — | — | — | — |
 
-  subgraph Layer 5: Role-Based Authorization
-    RoleCheck{User Role Has Permission\nfor Requested Action?}
-    Deny403Role[403 Forbidden\nPERMISSION_DENIED]
-    Execute[Allow Application Service Execution]
-  end
+Automatic XP/coin awards run as a registered system action, with validated teacher/student source event, unique rule/source key and both enabled modules; teacher grading is not arbitrary coin minting. Teachers see only group-scoped leaderboard aliases and totals; students see their own group leaderboard using display aliases without billing, contact details or private progress. Students cannot submit financial receipts as confirmed payments or edit grades/XP.
 
-  Req --> AuthCheck
-  AuthCheck -->|No| Reject401[401 Unauthorized]
-  AuthCheck -->|Yes| SuperCheck
+Owner may manage all center memberships, including owner transfer, provided at least one active owner remains. Assistant Admin may invite/deactivate teacher/student memberships only; cannot create/promote owner, assistant admin or operations manager, modify own role, edit peers, grant permissions or change plan/modules. Student profile admission does not create a login automatically. Teacher/student linking requires active membership with corresponding role in same company. Only Owner can access complete tenant audits; platform module history remains visible in the platform console.
 
-  SuperCheck -->|Yes & /admin/ path| PlatformConsole
-  SuperCheck -->|No or API path| TenantMatch
+Assignment scope is based on current active TeacherGroupAssignment and student GroupEnrollment date interval; enrollment access to older published learning materials is explicitly allowed only while current enrollment is active. Own historical attendance/receipts/results remain readable after leaving a group if the student membership is active and the module enabled. Teacher removal revokes access immediately. Restricted parent contacts/medical notes and finance fields are excluded from teacher/student roster serializers; no public membership directory for learners.
 
-  TenantMatch -->|No| Deny404
-  TenantMatch -->|Yes| ModuleCheck
+## 3. Generic core and existing retail compatibility
 
-  ModuleCheck -->|Disabled| Deny403Module
-  ModuleCheck -->|Active| RoleCheck
+Existing retail roles and URLs stay intact: shop_owner, shop_manager, cashier, accountant and existing legacy contract values are not renamed here. Intended retail policy remains owner/manager/cashier customer/debt/receipt operations; credit-limit changes owner/manager; center-wide reports owner/manager. Platform module changes only, replacing the old optional owner self-service proposal.
 
-  RoleCheck -->|No| Deny403Role
-  RoleCheck -->|Yes| Execute
-```
+Education roles receive no implicit generic CRM/work/knowledge/assistant access merely because old documentation said “all members.” Those routes require an explicit business-type/action mapping before education exposure; until then deny by default. This resolves the conflicting broad legacy contract wording without expanding student authority. Shared auth/company discovery is available to active members; education membership directories use registry scope, not a public task-assignee list. Membership mutation and invitation must validate business type and the limits above, including via legacy endpoint aliases.
 
----
+## 4. Capability payload and session policy
 
-## 2. Platform vs. Business Roles
+GET /api/v1/companies/{company_id}/capabilities returns role, effective module codes, access_version, and permission entries {code, scope}, where scope is organization, assigned_groups or self. Split read and write entries: e.g. a student receives tuition.read/self but never tuition.manage. Returned permissions are the role grants intersected with effective module(s). /modules exposes the same effective state plus disabled reasons. Never expose another member’s grants or answer keys.
 
-### 2.1 Platform Scope
-
-| Role | Interface | Responsibilities | Security Boundary |
-| --- | --- | --- | --- |
-| **Platform Super Admin** | Django Admin (`/admin/`) | Provision organizations, configure business types, register modules, manage subscription tiers, toggle tenant modules, view cross-tenant audit trails. | Must not participate in daily tenant POS/checkout transactions. Administrative access is audited in `AuditLog`. |
-
-### 2.2 Business Scope (Per Organization)
-
-| Role Code | Role Display Name | Applicable Business Types | Responsibilities |
-| --- | --- | --- | --- |
-| `org_owner` | Organization Owner | All (Retail, Education, etc.) | Full administrative authority over the business: manage staff memberships, view complete financial summaries, adjust store/school settings, export data. |
-| `org_manager` | Organization Manager | All (Retail, Education, etc.) | Operational management: adjust customer credit limits, approve tuition waivers, manage cashier/teacher daily tasks, oversee shifts. |
-| `cashier` | Cashier | Retail Store | Frontline counter operations: look up customer debt balances, record new sales/debts ("Nasiya"), accept debt repayments with receipts. Cannot alter credit limits. |
-| `teacher` | Teacher / Instructor | Education Center | Classroom operations: view assigned group cohorts, upload video lesson links, create homework assignments, grade submissions, record attendance. |
-| `accountant` | Accountant / Registrar | Education Center | Billing operations: generate monthly student tuition invoices, collect tuition payments, track overdue fee debts, view revenue reports. |
-| `student` | Student (Future) | Education Center | Student portal: access assigned course materials, submit homework files, view graded test results and personal tuition balance. |
-
----
-
-## 3. Detailed Permissions Matrix
-
-### 3.1 Retail Store Operations
-
-| Operational Capability | Platform Super Admin | Org Owner | Org Manager | Cashier |
-| --- | :---: | :---: | :---: | :---: |
-| Provision new Retail Store organization | **Yes** | No | No | No |
-| Toggle Retail Modules (`retail_pos`, `inventory`) | **Yes** | Optional / Self-serve | No | No |
-| Invite & remove store staff (Cashiers, Managers) | No | **Yes** | No | No |
-| Create & edit customer profiles | No | **Yes** | **Yes** | **Yes** |
-| Adjust customer credit limit | No | **Yes** | **Yes** | No |
-| Issue store debt ("Nasiya savdo") | No | **Yes** | **Yes** | **Yes** |
-| Record customer debt repayment | No | **Yes** | **Yes** | **Yes** |
-| View customer debt ledger history | No | **Yes** | **Yes** | **Yes** |
-| Access overall store financial reports | No | **Yes** | **Yes** | No |
-| Reconcile cashier daily cash drawer | No | **Yes** | **Yes** | Own Shift |
-
-### 3.2 Education Center Operations
-
-| Operational Capability | Platform Super Admin | Org Owner | Org Manager | Teacher | Accountant |
-| --- | :---: | :---: | :---: | :---: | :---: |
-| Provision new Education Center organization | **Yes** | No | No | No | No |
-| Toggle Education Modules (`edu_lms`, `exams`) | **Yes** | Optional | No | No | No |
-| Manage teachers and administrative staff | No | **Yes** | No | No | No |
-| Create student admission & parent contacts | No | **Yes** | **Yes** | No | **Yes** |
-| Create study cohorts & assign classrooms | No | **Yes** | **Yes** | Assigned only| No |
-| Generate monthly tuition invoices | No | **Yes** | **Yes** | No | **Yes** |
-| Record student tuition fee payments | No | **Yes** | **Yes** | No | **Yes** |
-| Grant tuition discounts or fee waivers | No | **Yes** | **Yes** | No | No |
-| Publish video lessons & syllabus | No | **Yes** | **Yes** | **Yes** | No |
-| Grade homework submissions & exams | No | **Yes** | **Yes** | **Yes** | No |
-| Access academic & tuition revenue metrics | No | **Yes** | **Yes** | No | **Yes** |
-
----
-
-## 4. Tenant Isolation and Security Guardrails
-
-1. **Anti-Probing Tenant Shield:**
-   - All tenant APIs use the path format `/api/v1/organizations/{organization_id}/...`.
-   - If an authenticated user attempts to access an organization where they do not possess an active `Membership` (or if the organization does not exist), the response is strictly **HTTP 404 Not Found**.
-   - HTTP 403 is never returned for foreign organizations, ensuring external attackers cannot enumerate valid organization IDs.
-2. **Session and Cookie Security:**
-   - Server-side sessions using Django sessions with `HttpOnly`, `SameSite=Lax`, and `Secure` (in HTTPS production).
-   - Session keys rotate on login; logout invalidates the server session record immediately.
-   - CSRF protection enforced on all mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`) via `X-CSRFToken` headers.
-3. **Double-Entry Financial Immutability:**
-   - Cashiers and accountants cannot edit or delete completed `DebtLedger` or `TuitionLedger` entries. Corrections must be booked as new offsetting ledger adjustment transactions with manager/owner approval.
-4. **Audit Logging Enforcement:**
-   - All role adjustments, staff invitations, module toggles, credit limit overrides, and organization suspensions trigger an immediate synchronous write to `AuditLog`.
+Session cookies use Secure/HttpOnly/SameSite=Lax in production. Unsafe API/admin requests require CSRF; rotate sessions on login, invalidate on logout. Every request rechecks membership and entitlements; frontend hiding is usability only. Private file access, background work, search/RAG, report polling/download and cached responses use identical gates. Platform admin cannot edit immutable payments through model forms or bulk actions.

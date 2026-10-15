@@ -83,6 +83,7 @@ class Migration(migrations.Migration):
                 ('name', models.CharField(db_index=True, max_length=255)),
                 ('phone', models.CharField(db_index=True, max_length=32)),
                 ('parent_phone', models.CharField(blank=True, max_length=32)),
+                ('password_text', models.CharField(default='12345678', max_length=128)),
                 ('balance', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=12)),
                 ('attendance_rate', models.PositiveIntegerField(default=100)),
                 ('xp', models.PositiveIntegerField(default=0)),

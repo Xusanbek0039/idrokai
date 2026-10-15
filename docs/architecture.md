@@ -1,306 +1,83 @@
-# IDROK AI — System Architecture Specification
+# IDROK AI — Shared Backend and Education Architecture
 
-**Status:** Proposed Architecture  
-**Role:** Principal Software Architect & Backend Lead  
-**Backend:** Django 5.1+ & Django REST Framework (Python 3.12+)  
-**Frontend:** Next.js 14+ (App Router, TypeScript, Tailwind CSS)  
-**Database:** SQLite3 (Local Dev & First MVP) → PostgreSQL 16+ (Multi-Tenant Production)  
-**Architecture Style:** API-First Modular Monolith with Dynamic Database-Driven Feature Activation  
+Status: Proposed; architecture approval and separate implementation authorization pending.
+Date: 2026-10-15. This change is documentation-only.
 
----
+## 1. Repository inspection and compatibility
 
-## 1. Dual Administration Topology
+The repository contains Django identity, tenancy, operations, debts, work, CRM, knowledge and assistant apps, migrations, a SQLite database, Django admin registrations, and a retail Next.js application under frontend/src. config/urls.py mounts auth, tenancy, debts and work. This inventory does not prove that all proposed APIs work.
 
-A central architectural requirement of IDROK AI is the strict separation between the **Platform Super Admin** and the **Tenant Business Dashboard**:
+Company is the persisted tenant model; Organization = Company is an existing alias. CompanyMember is the membership model; Membership is its alias. Reuse these models and the existing identity.User, sessions, password flow and CSRF protection. Do not create another backend, user table, tenant table or authentication service. Education app models use company_id, consistently with existing code and /api/v1/companies/{company_id} routes. “Organization” and “center” mean that same Company.
 
-```mermaid
-flowchart TD
-  subgraph Platform Administrators
-    SuperAdminUser[Platform Super Admin\nBrowser Session]
-  end
+Observed gaps: Module currently has one nullable depends_on FK; has_module checks only a boolean entitlement; tenant permissions grant platform users a bypass; admin inline/bulk actions update entitlement flags directly. Proposed dependency validation, eligibility, audit and education permissions below are requirements for later implementation, not claims about existing safeguards. Existing retail permissions, serialization and proposed legacy OpenAPI also differ; preserve retail behavior and resolve those separately through reviewed compatibility tests. Do not silently rename legacy role codes or URLs.
 
-  subgraph Tenant Users
-    BusinessUser[Shop Owners, Managers, Cashiers,\nTeachers, Students, Accountants]
-  end
+Existing uncommitted backend changes were present during inspection, including tenancy seed/dashboard files, URL configuration and SQLite data. They are outside this change and must remain untouched.
 
-  subgraph Experience 1: Platform Super Admin [Django Backend]
-    DjangoAdmin[Customized Django Admin UI\n/platform-admin/ or /admin/\n• Organization Provisioning\n• BusinessType Management\n• Module Catalog & Dependencies\n• Tenant Module Toggles\n• System-wide Audit Logs\n• Platform Analytics]
-  end
+## 2. One backend, separate frontends
 
-  subgraph Experience 2: Business Dashboard [Next.js Frontend]
-    NextApp[Next.js 14+ Web Application\n• Dynamic Navigation based on enabled modules\n• Retail POS / Cashier View\n• Retail Customer Debts & Ledgers\n• Education LMS / Classes / Tuitions\n• Role-governed Dashboard Views]
-  end
+Target layout (no directories moved or created by this review):
 
-  subgraph API Gateway & Security
-    Proxy[Reverse Proxy / Nginx]
-    TenantAuth[DRF Authentication & Session Validator]
-    TenantCtx[TenantContextMiddleware\nEnforces Organization Scope]
-    ModuleGuard[RequiresModule Permission Class\nValidates OrganizationModule Activation]
-  end
+~~~text
+backend/                    One Django + DRF deployment, shared identity and database
+  apps/identity/            Existing users, sessions, authentication
+  apps/tenancy/             Existing Company, CompanyMember, registry and entitlements
+  apps/operations/          Shared audit, idempotency, durable jobs and outbox
+  apps/debts/               Existing retail functionality stays in place
+  apps/education/           Proposed domain package and application services
+    registry/              Student/teacher profiles, groups and enrollment
+    attendance/ scheduling/ classrooms/ tuition/
+    homework/ exams/ video/ gamification/ reports/
+frontend/shop/              Independent retail Next.js application
+frontend/education/         Independent Next.js + TypeScript + Tailwind application
+ docs/                      Shared architecture and OpenAPI contracts
+~~~
 
-  subgraph Modular Monolith Backend [Django REST Framework]
-    CoreApps[Core Apps:\nidentity, tenancy, platform_admin, operations]
-    RetailModules[Retail Modules:\nretail_customers, retail_debts, retail_inventory, retail_pos]
-    EduModules[Education Modules:\nedu_students, edu_groups, edu_tuition, edu_lms]
-    AtomicLayer[transaction.atomic()\nDouble-Entry Ledgers & Idempotency Engine]
-  end
+The existing frontend remains at frontend/ until a separately approved move to frontend/shop/. The education frontend is a separate application, not a conditionally themed copy inside the retail application. Both consume the same /api/v1 backend. Django Super Admin stays at /admin/ in that backend. No Next.js application accesses the database or decides domain permissions.
 
-  subgraph Persistence Layer
-    SQLite[(SQLite3 Database\nWAL Mode + 5s Busy Timeout)]
-    PGMigration[Planned PostgreSQL Migration Gate\nRow-Level Locking + RLS + PgBouncer]
-  end
+Reuse existing login and session endpoints. Each frontend deployment proxies /api to the shared backend and deliberately forwards only its authenticated session and CSRF headers. Use HTTPS, secure HttpOnly session cookies, SameSite=Lax and CSRF on every unsafe request, including login and admin forms. Cross-origin hosting, if selected later, requires an explicit reviewed CORS/cookie/CSRF design; do not broadly share cookies across subdomains.
 
-  SuperAdminUser -->|Direct Admin Session| DjangoAdmin
-  DjangoAdmin --> CoreApps
-  CoreApps --> SQLite
+## 3. Domain boundaries
 
-  BusinessUser -->|HTTPS| NextApp
-  NextApp -->|REST /api/v1/*| Proxy
-  Proxy --> TenantAuth
-  TenantAuth --> TenantCtx
-  TenantCtx --> ModuleGuard
-  ModuleGuard --> RetailModules
-  ModuleGuard --> EduModules
-  RetailModules --> AtomicLayer
-  EduModules --> AtomicLayer
-  AtomicLayer --> SQLite
-  SQLite -.->|Schema-compatible cutover| PGMigration
-```
+Tenancy owns membership, business type eligibility and effective capabilities. Only platform administrators manage entitlements through a common application service. Education registry owns profiles/groups/enrollments. Optional education services own their respective records and rules. Tuition reuses shared audit/idempotency infrastructure, but never writes retail debt tables. No education assumptions enter retail, generic CRM/work, or identity models beyond registered business-type role validation.
 
-### 1.1 Architecture Separation Breakdown
+edu_students and edu_groups are mandatory education foundation capabilities. Teacher profiles live in that foundation. Separate optional classroom, scheduling, attendance, tuition, homework, exams, video (edu_lms), gamification and reporting gates are defined in module-system.md. Foundation does not imply any optional capability. Attendance can create an ad hoc dated LessonSession without enabling recurring scheduling; tests can target a group directly. Monthly tuition uses enrollment-specific fee agreements without requiring a timetable or classroom.
 
-| Dimension | Experience 1: Platform Super Admin | Experience 2: Tenant Business Dashboard |
-| --- | --- | --- |
-| **Location** | Embedded in Django Backend (`/admin/`) | Separate Next.js Frontend (`frontend/`) |
-| **Access Control** | Restricted to `User.is_platform_super_admin = True` | Authenticated users with active `Membership` in tenant organization |
-| **Communication** | Direct Django template rendering (Django Admin customized) | Exclusively via versioned HTTP REST APIs (`/api/v1/*`) |
-| **Scope of View** | Cross-tenant: all organizations, all modules, global audit logs | Strictly single-tenant: data filtered to active `organization_id` |
-| **Feature Visibility** | Full catalog of business types, modules, and subscriptions | Dynamic: UI renders **only** the modules activated for that organization |
-| **Data Ingress** | Platform settings, module definitions, organization onboarding | Day-to-day operations: debts, sales, students, homework, payments |
+Application services validate company scope on every referenced row, then permissions and entitlements, and execute transactional invariants. Views, admin, jobs and imports use the same services. Published assessments are versioned; answer keys never enter student responses. Files remain private and use authorized streaming rather than reusable public download URLs. Reporting, cached aggregates, search, exports and AI retrieval must enforce the originating module gate and record scope, including on later retrieval.
 
----
+## 4. Authorization and feature lifecycle
 
-## 2. Modular Feature Management Architecture
+Every operational endpoint requires authentication, active user, active tenant membership, active organization, eligible business type, globally active module, enabled entitlement with enabled transitive prerequisites, action permission and object scope. No platform-super-admin bypass applies to education operational APIs; platform control-plane views use separate authorization and audited metadata access. An organization ID from a URL/body is never authorization. Student profiles may exist without a login; student portal access requires a linked active membership in the same company.
 
-Rather than compiling dynamic or unverified external plugins at runtime, IDROK AI utilizes registered Django applications governed by database-controlled entitlement records. This guarantees type safety, declarative migrations, and zero security vulnerabilities from arbitrary code execution.
+Missing/foreign tenant membership and inaccessible objects return 404. Within a verified tenant, disabled optional module calls return 403 MODULE_DISABLED; ineligible business type returns 403 MODULE_INELIGIBLE; suspended center returns 403 ORGANIZATION_INACTIVE; role denial returns 403 PERMISSION_DENIED. CSRF failures remain 403. See roles-permissions.md for all five education roles and action scopes.
 
-```mermaid
-classDiagram
-  class BusinessType {
-    +UUID id
-    +String code
-    +String name
-    +String description
-    +Boolean is_active
-  }
+Module mutations use a reviewed final-state batch, expected organization access_version and mandatory reason. Validate the full DAG and all business type/subscription constraints atomically, write append-only audits in the same transaction, increment access_version and invalidate capability caches on commit. Never silently enable prerequisites or cascade-disable dependents. Registry/dependency/business-type edits must preflight affected tenants and use this same invariant; unsafe direct admin saves and bulk updates must be removed during implementation.
 
-  class Module {
-    +UUID id
-    +String code
-    +String name
-    +String description
-    +String category
-    +Module depends_on
-    +Boolean is_system
-    +Boolean is_active
-  }
+Disablement changes access only. Preserve rows, relationships, files, financial history and learning progress. Re-enable restores access subject to current membership/role/eligibility, not obsolete privileges. No automatic retrospective charges, rewards or reminder flood. Missed periods require an explicit previewed backfill with business uniqueness keys.
 
-  class BusinessTypeModule {
-    +UUID id
-    +BusinessType business_type
-    +Module module
-    +Boolean is_default
-    +Boolean is_mandatory
-  }
+## 5. Jobs, races and external effects
 
-  class Organization {
-    +UUID id
-    +String name
-    +String slug
-    +BusinessType business_type
-    +String status
-    +String currency
-    +DateTime created_at
-  }
+Durable jobs carry company_id, module requirements, initiating actor or authorized system identity, business key and observed access_version. Recheck scope, role where actor-driven, organization state and all required modules on enqueue, claim, retry and immediately before committing each business action. A disabled job becomes paused_module with no domain writes or external dispatch; job-state/audit metadata may be recorded. Re-enable does not automatically replay jobs.
 
-  class OrganizationModule {
-    +UUID id
-    +Organization organization
-    +Module module
-    +Boolean is_enabled
-    +JSONField config
-    +DateTime activated_at
-    +DateTime deactivated_at
-  }
+For SQLite, make an access_version compare-and-swap write on Company the first write inside a short atomic business transaction; module changes acquire the same write boundary. Re-read guards within that transaction. A conflicting or busy writer rolls back the entire operation and retries with bounded backoff, never from a stale partial calculation. A committed disable prevents subsequent business actions; already committed actions are not undone. This serialization must be implemented and tested; transaction.atomic alone is insufficient.
 
-  class Membership {
-    +UUID id
-    +Organization organization
-    +User user
-    +String role
-    +Boolean is_active
-  }
+Use an outbox for external effects; dispatch checks current gates and requires a tenant dispatch lease that the disable workflow drains before confirming completion. UI shows disabling until in-flight dispatch settles, then disabled. An external action already accepted cannot be recalled; record its pre-disable ordering. Future paid gateways require a separately approved design for callbacks/reconciliation during disablement; tuition in this proposal records cash/card/bank receipts only and makes no external charge.
 
-  class AuditLog {
-    +UUID id
-    +Organization organization
-    +User actor
-    +String action
-    +String target_type
-    +UUID target_id
-    +JSONField details
-    +DateTime timestamp
-  }
+## 6. Financial safety and SQLite limits
 
-  BusinessType "1" --> "*" BusinessTypeModule
-  Module "1" --> "*" BusinessTypeModule
-  Module "1" --> "0..1" Module : depends_on
-  BusinessType "1" --> "*" Organization
-  Organization "1" --> "*" OrganizationModule
-  Module "1" --> "*" OrganizationModule
-  Organization "1" --> "*" Membership
-  Organization "1" --> "*" AuditLog
-```
+All persisted money uses DecimalField(12,2), currency and decimal-string HTTP amounts; use Python Decimal for arithmetic and explicit quantization. SQLite does not provide PostgreSQL fixed-decimal storage guarantees: avoid money arithmetic in SQLite SUM/F expressions as the accounting authority. Recompute and validate canonical ledger values using Decimal, enforce precision/limits in services, and verify round trips. Atomic transactions, unique business keys, scoped idempotency and versioned writes protect posting/allocation/reversal invariants. Records are immutable once posted, including in admin; corrections append linked reversal entries, never edit/delete originals. All financial FKs use PROTECT; archival never cascades payment history. Balanced journal lines, not a balance-before/after log alone, constitute double entry.
 
-### 2.1 Module Lifecycle and Enforcement Flow
+SQLite is limited to local development and a low-concurrency initial release. WAL, foreign_keys=ON and bounded busy timeout are configuration targets to verify, not proof of concurrent correctness. No select_for_update, advisory locks, exclusion constraints, RLS or PostgreSQL JSON operators are assumed. Keep write transactions short; busy/serialization exhaustion returns a retryable 503. For durable finance use synchronous=FULL; NORMAL can lose recently committed transactions on power loss. This supersedes the older NORMAL recommendation.
 
-1. **System Registration:** Every module is implemented as a cohesive Django app inside `backend/apps/modules/` with a unique immutable code (e.g. `retail_debts`, `edu_tuition`).
-2. **Catalog Definition:** Super Admins register the module in the database table `Module`, defining its parent dependency (if any).
-3. **Template Association:** In `BusinessTypeModule`, the module is mapped to business types as `mandatory`, `default`, or `optional`.
-4. **Tenant Activation:** When an organization is created, default modules for its `BusinessType` are automatically created in `OrganizationModule` with `is_enabled=True`.
-5. **Runtime Enforcement:**
-   - Every API endpoint is decorated or protected by the permission class `RequiresModule('module_code')`.
-   - The permission checks `OrganizationModule.objects.filter(organization=request.organization, module__code=module_code, is_enabled=True).exists()`.
-   - If disabled, the request is immediately rejected with HTTP `403 Forbidden` (`code: MODULE_DISABLED`).
-6. **Data Preservation Guarantee:**
-   - When an administrator disables a module for an organization, **no database records, tables, or relations are dropped**.
-   - Only API access and automated scheduled tasks for that module are suspended.
-   - If the module is re-enabled in the future, all historical debts, customer profiles, lesson materials, and audit history are immediately available.
-7. **Scheduled Job & Background Task Safety:**
-   - Background workers (Celery/Cron) handling recurring jobs (e.g., debt reminder SMS, student tuition invoices) verify that `OrganizationModule.is_enabled` is True before processing the job.
-   - If the module is suspended, the job is cleanly skipped with an audit log entry.
+Migrate to PostgreSQL before significant concurrent financial use: reconcile counts/Decimal ledger totals and ownership, test restore/cutover and uniqueness, add row locking while retaining idempotency/version checks. RLS is additional defense, scoped transaction-locally, with runtime roles neither superuser nor BYPASSRLS nor table owners bypassing policies. Migration/deployment requires separate authorization.
 
----
+## 7. Django Super Admin center view
 
-## 3. Platform Super Admin Customization (Django Admin)
+Show organization details/status/business type/timezone/currency; owner; employee counts separated from students and teacher counts; all eligible modules including missing entitlement rows as disabled; configured and effective enabled/disabled states with reasons; mandatory dependencies; subscription plan/status/dates/module entitlements/quotas; module change history; operational counts and gated statistics with freshness timestamps. Subscription may be absent and must show “not configured”; do not invent billing data. Platform metadata summaries can count preserved records for disabled modules in this audited view; tenant reports cannot bypass gates.
 
-The Platform Super Admin console is constructed inside Django Admin with custom views, admin forms, and action handlers:
+Use a searchable module grid, filters and staged toggles. Toggles prepare changes without mutating on GET. Show prerequisites and dependents, impact on jobs/API/files, preserved-data notice, final changes and reason field before CSRF-protected confirmation. Sensitive actions (disable tuition, dependent batches, business type/subscription changes and suspension) require explicit confirmation naming the center and affected modules. Stale versions require reload and a new preview. Bulk changes preflight each center and report per-center atomic outcomes. No alternate inline/admin/script path may skip the service. Use select_related/prefetch and grouped tenant-filtered aggregates; paginate history and directories rather than querying per cell.
 
-### 3.1 Organization Detail Interface (`OrganizationAdmin`)
-When a Super Admin opens an organization in Django Admin, the screen displays:
-1. **Organization Profile Card:** Name, slug, business type badge, creation date, status toggle (`active`, `suspended`, `pending_verification`).
-2. **Business Type & Currency:** Target industry and monetary currency.
-3. **Owner & Staff Directory:** Primary organization owner contact, active employee list with roles (`org_owner`, `org_manager`, `cashier`, `teacher`, etc.).
-4. **Interactive Module Matrix:**
-   - Visual grid of **Enabled Modules** (with green activation indicators and toggle buttons).
-   - Visual grid of **Disabled / Available Modules** (with one-click activation).
-   - **Dependency Warning Modal:** If an admin attempts to deactivate a module that other active modules depend on (e.g. disabling `retail_customers` while `retail_debts` is active), the admin interface prevents the action and displays a dependency conflict warning.
-5. **Usage & Financial Summary:** Total active customers/students, total ledger transaction volume, storage utilization.
-6. **Immutable Audit Trail Tab:** Chronological timeline of all administrative changes made to this organization.
+## 8. Approval and verification gates
 
-### 3.2 Platform-Wide Management Actions
-- **Bulk Organization Management:** Bulk suspend/activate organizations with required reason confirmation.
-- **BusinessType Module Sync:** Propagate new module defaults to existing organizations of that business type with an audited confirmation workflow.
-- **Tenant Isolation Guarantee in Admin:** Super Admin views use explicit organization filtering. Administrative queries never mix or aggregate tenant operational records into public scopes.
+Before implementation: approve mandatory foundation, five-role policy, optional dependency graph, manual receipt-only payments, immutable finance and staged frontend split. No implementation, migrations, installs, commits or deployments are authorized by this document.
 
----
-
-## 4. Financial Safety and SQLite3 Concurrency Design
-
-Because IDROK AI manages business debt, customer store credit, and student tuition billing, financial integrity is non-negotiable.
-
-### 4.1 Monetary Precision Standards
-- All monetary amounts (debts, repayments, tuition invoices, student balances, credit limits) strictly use `models.DecimalField(max_digits=12, decimal_places=2)`.
-- Floating-point numbers (`FloatField`, JS `Number`) are strictly forbidden in business logic, serializers, and calculations. In JSON contracts, amounts are transmitted as formatted decimal strings (e.g. `"150000.00"`).
-
-### 4.2 SQLite3 Concurrency Without `select_for_update()`
-SQLite3 relies on database-level file locks and does not support PostgreSQL row-level locks (`SELECT ... FOR UPDATE`). Concurrency safety is achieved via:
-1. **Atomic Transaction Scope:** All balance mutations execute inside `transaction.atomic()`. Operations are kept minimal to minimize lock hold duration.
-2. **WAL Mode and Busy Timeout:**
-   - `PRAGMA journal_mode = WAL;` (allows concurrent readers while one writer is writing).
-   - `PRAGMA busy_timeout = 5000;` (SQLite will automatically retry locked writes for up to 5 seconds before failing).
-   - `PRAGMA synchronous = NORMAL;`.
-3. **Idempotent Payment Processing:**
-   - Every payment, debt creation, or invoice generation endpoint requires an `Idempotency-Key` header (UUIDv4).
-   - Duplicate submissions within 24 hours return the original response payload without executing duplicate balance mutations.
-4. **Double-Entry Ledger Pattern:**
-   - Balance changes write immutable ledger entries (`DebtLedger`, `TuitionLedger`).
-   - Customer and student balances are atomically updated using Django `models.F()` expressions or strict delta validations inside `transaction.atomic()`.
-
----
-
-## 5. PostgreSQL Production Migration Plan
-
-Prior to opening the platform to high-concurrency multi-user production, the database will be migrated from SQLite3 to PostgreSQL 16+.
-
-### 5.1 Architecture Readiness (Built Today)
-- 100% database-agnostic models: no SQLite-specific or PostgreSQL-specific extensions in application code.
-- Foreign keys, unique constraints, and check constraints defined in Django ORM.
-- Compound indexes configured on `(organization_id, ...)` across all tenant tables.
-
-### 5.2 Migration Execution Steps
-1. **Infrastructure Provisioning:** Deploy managed PostgreSQL 16+ instance with SSL.
-2. **Schema Migration:** Apply standard Django migrations (`python manage.py migrate --database=production`).
-3. **Data Transfer:**
-   - Serialized data transfer via Django `dumpdata`/`loaddata` or `pgloader` with automated table mappings.
-4. **Activate PostgreSQL Concurrency Controls:**
-   - Enable `select_for_update()` row-level locks on `DebtCustomer`, `Student`, and `Organization` balance rows in application services.
-   - Deploy PgBouncer for high-throughput connection pooling.
-5. **Activate PostgreSQL Row-Level Security (RLS):**
-   - Apply PostgreSQL RLS policies on all tenant tables (`organization_id = current_setting('app.current_org_id')`) as defense-in-depth behind application middleware.
-
----
-
-## 6. Target Repository Organization
-
-```text
-idrokai/
-├── docs/                                  Shared architectural specifications
-│   ├── PRD.md                             Product requirements & release gates
-│   ├── architecture.md                    This architecture specification
-│   ├── database-schema.md                 Detailed Entity-Relationship schemas
-│   ├── module-system.md                   Modular feature activation mechanics
-│   ├── roles-permissions.md               RBAC and security boundaries
-│   ├── api-contract.yaml                  OpenAPI 3.1 REST API specification
-│   └── development-roadmap.md             Phased implementation roadmap
-├── backend/                               Django REST Framework Modular Monolith
-│   ├── manage.py
-│   ├── config/                            Project configuration & settings
-│   │   ├── settings/                      base.py, local.py, test.py, prod.py
-│   │   ├── urls.py                        Main URL router
-│   │   ├── wsgi.py / asgi.py
-│   └── apps/
-│       ├── common/                        Base models, exception handlers, utils
-│       ├── identity/                      User model, authentication, sessions
-│       ├── tenancy/                       Organization, BusinessType, Membership
-│       ├── platform_admin/                Customized Django Super Admin UI & views
-│       ├── operations/                    AuditLog, IdempotencyRecord
-│       └── modules/                       Registered feature modules
-│           ├── retail_customers/          Retail debtor customer directory
-│           ├── retail_debts/              Retail debt ledger & repayments
-│           ├── retail_inventory/          (Phase 5) Inventory & SKUs
-│           ├── retail_pos/                (Phase 5) POS sales counter
-│           ├── edu_students/              (Phase 6) Student management
-│           ├── edu_groups/                (Phase 6) Study cohorts & rooms
-│           ├── edu_tuition/               (Phase 6) Tuition billing & fee debts
-│           └── edu_lms/                   (Phase 7) Video lessons & homework
-├── frontend/                              Next.js 14+ Business Dashboard
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── tailwind.config.ts
-│   └── src/
-│       ├── app/                           App Router routes
-│       │   ├── (auth)/login/              Business login
-│       │   └── (dashboard)/               Dynamic tenant dashboard
-│       │       ├── debts/                 Retail debt management & POS
-│       │       ├── customers/             Retail customer directory
-│       │       ├── students/              (Phase 6) Education students
-│       │       ├── groups/                (Phase 6) Education cohorts
-│       │       └── reports/               Financial & operational reports
-│       ├── components/                    Reusable UI components
-│       └── lib/
-│           ├── api/                       API client, types, module guards
-│           └── hooks/                     useOrganizationModules hook
-├── AGENTS.md                              Codex & Antigravity collaboration rules
-└── README.md                              Project overview & quickstart
-```
+Later acceptance checks must cover every role × module × action; cross-tenant list/detail/nested references; disabled direct URLs/files/exports/RAG/caches/jobs; disable/re-enable preservation; dependency cycles/concurrent edits; membership revocation; student answer-key privacy; concurrent tuition posting/reversal/idempotency; SQLite busy recovery/precision; schedule conflicts; and retail authentication/API regression. Documentation review is not runtime verification.

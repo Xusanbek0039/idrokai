@@ -241,6 +241,47 @@ class Command(BaseCommand):
                     defaults={'is_enabled': is_def}
                 )
 
+        # Create demo Retail Store 1: Anor Supermarket (Chilonzor)
+        retail_org1, created_r1 = Company.objects.get_or_create(
+            name="Anor Supermarket (Chilonzor)",
+            defaults={
+                'business_type': retail_bt,
+                'phone': "+998901112233",
+                'address': "Toshkent shahri, Chilonzor 7-mavze",
+                'currency': "UZS",
+                'status': Company.STATUS_ACTIVE,
+            }
+        )
+        for m, is_def, is_mand in retail_modules:
+            OrganizationModule.objects.get_or_create(
+                company=retail_org1,
+                module=m,
+                defaults={'is_enabled': is_def or is_mand}
+            )
+        CompanyMember.objects.get_or_create(
+            company=retail_org1,
+            user=superadmin,
+            defaults={'role': CompanyMember.ROLE_SHOP_OWNER}
+        )
+
+        # Create demo Retail Store 2: Baraka Oziq-ovqat Do'koni (Yunusobod)
+        retail_org2, created_r2 = Company.objects.get_or_create(
+            name="Baraka Oziq-ovqat (Yunusobod)",
+            defaults={
+                'business_type': retail_bt,
+                'phone': "+998934445566",
+                'address': "Toshkent shahri, Yunusobod 12-mavze",
+                'currency': "UZS",
+                'status': Company.STATUS_ACTIVE,
+            }
+        )
+        for m, is_def, is_mand in retail_modules:
+            OrganizationModule.objects.get_or_create(
+                company=retail_org2,
+                module=m,
+                defaults={'is_enabled': is_def or is_mand}
+            )
+
         # Create demo education organization if none exists
         if not Company.objects.filter(business_type=edu_bt).exists():
             edu_org = Company.objects.create(
@@ -264,4 +305,106 @@ class Command(BaseCommand):
             )
             self.stdout.write(self.style.SUCCESS("Created demo Education Center organization: Registon O'quv Markazi"))
 
+        # 6. Seed Debtors and Debts for Anor Supermarket
+        from apps.debts.models import DebtCustomer, DebtRecord, RepaymentRecord, DebtLedger
+        from apps.debts.services import create_debt_service, record_repayment_service
+        from decimal import Decimal
+        import datetime
+
+        if not DebtCustomer.objects.filter(company=retail_org1).exists():
+            c1 = DebtCustomer.objects.create(
+                company=retail_org1,
+                full_name="Akmal Rustamov",
+                phone_number="+998901234567",
+                address="Chilonzor 7, 14-uy, 22-xonadon",
+                credit_limit=Decimal('5000000.00'),
+                status=DebtCustomer.STATUS_ACTIVE,
+                notes="Mahalla oqsoqoli, ishonchli doimiy xaridor"
+            )
+            c2 = DebtCustomer.objects.create(
+                company=retail_org1,
+                full_name="Dilshod Karimov",
+                phone_number="+998939876543",
+                address="Chilonzor 9, 5-uy",
+                credit_limit=Decimal('10000000.00'),
+                status=DebtCustomer.STATUS_ACTIVE,
+                notes="Qurilish ustasi, har 15 kunda to'laydi"
+            )
+            c3 = DebtCustomer.objects.create(
+                company=retail_org1,
+                full_name="Zuhra Rahimova",
+                phone_number="+998975554433",
+                address="Chilonzor 8, 3-uy",
+                credit_limit=Decimal('2000000.00'),
+                status=DebtCustomer.STATUS_ACTIVE,
+                notes="Maktab o'qituvchisi"
+            )
+            c4 = DebtCustomer.objects.create(
+                company=retail_org1,
+                full_name="Otabek Jo'rayev",
+                phone_number="+998912223344",
+                address="Chilonzor 7, 8-uy",
+                credit_limit=Decimal('4000000.00'),
+                status=DebtCustomer.STATUS_ACTIVE,
+                notes="Tadbirkor"
+            )
+
+            # Issue realistic initial debts
+            today = datetime.date.today()
+            d1 = create_debt_service(
+                company=retail_org1,
+                customer=c1,
+                amount=Decimal('850000.00'),
+                description="Oziq-ovqat mahsulotlari (go'sht, yog', non)",
+                recorded_by=superadmin,
+                due_date=today + datetime.timedelta(days=15)
+            )
+            d2 = create_debt_service(
+                company=retail_org1,
+                customer=c2,
+                amount=Decimal('1450000.00'),
+                description="1 qop un (50kg), 5L yog', shakar va qandolat",
+                recorded_by=superadmin,
+                due_date=today + datetime.timedelta(days=10)
+            )
+            d3 = create_debt_service(
+                company=retail_org1,
+                customer=c3,
+                amount=Decimal('320000.00'),
+                description="Tozalash vositalari va bolalar shirinliklari",
+                recorded_by=superadmin,
+                due_date=today + datetime.timedelta(days=20)
+            )
+            d4 = create_debt_service(
+                company=retail_org1,
+                customer=c4,
+                amount=Decimal('2100000.00'),
+                description="Katta xarid: go'sht mahsulotlari va ichimliklar",
+                recorded_by=superadmin,
+                due_date=today + datetime.timedelta(days=7)
+            )
+
+            # Register partial repayments
+            import uuid
+            record_repayment_service(
+                company=retail_org1,
+                customer=c2,
+                amount=Decimal('500000.00'),
+                payment_method=RepaymentRecord.METHOD_CARD,
+                idempotency_key=uuid.uuid4(),
+                notes="Uzcard orqali qisman so'ndirildi",
+                recorded_by=superadmin
+            )
+            record_repayment_service(
+                company=retail_org1,
+                customer=c1,
+                amount=Decimal('200000.00'),
+                payment_method=RepaymentRecord.METHOD_CASH,
+                idempotency_key=uuid.uuid4(),
+                notes="Naqd pulda qisman to'lov",
+                recorded_by=superadmin
+            )
+            self.stdout.write(self.style.SUCCESS("Seeded retail debt customers and transactions for Anor Supermarket."))
+
         self.stdout.write(self.style.SUCCESS("IDROK AI Platform successfully seeded!"))
+

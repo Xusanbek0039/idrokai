@@ -1,0 +1,829 @@
+{% extends "admin_dashboard/base.html" %}
+
+{% block title %}IDROK AI — Platform Super Admin Real Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-8 max-w-7xl mx-auto pb-12">
+
+  <!-- Hero Welcome Banner -->
+  <div class="relative bg-gradient-to-r from-dark-900 via-dark-800 to-slate-900 text-white rounded-3xl p-8 border border-slate-800 shadow-xl overflow-hidden">
+    <div class="absolute -right-10 -bottom-10 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="px-2.5 py-1 text-[11px] font-black uppercase rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">IDROK AI v1.0</span>
+          <span class="text-xs font-semibold text-slate-400">Universal Modulli SaaS Platformasi</span>
+        </div>
+        <h1 class="text-3xl font-extrabold tracking-tight text-white">Platform Super Admin Dashboard</h1>
+        <p class="text-sm text-slate-300 mt-1 max-w-2xl">
+          Barcha savdo do'konlari, o'quv markazlari, faol modullar, nasiyalar oqimi va tizim xavfsizligini yagona markazdan to'liq boshqaring.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-3 shrink-0 flex-wrap">
+        <button onclick="openCreateOrgModal()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/25 transition flex items-center gap-2">
+          <i class="fa-solid fa-plus"></i>
+          <span>Yangi Tashkilot Qo'shish</span>
+        </button>
+        <a href="http://127.0.0.1:3000/debts" target="_blank" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-200 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition flex items-center gap-2">
+          <i class="fa-solid fa-cash-register text-emerald-400"></i>
+          <span>Business POS Kassa (3000-port)</span>
+          <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 Primary KPI Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <!-- Card 1: Organizations -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Jami Tashkilotlar</div>
+          <div class="text-3xl font-black text-slate-900 mt-2 tracking-tight">{{ total_orgs }} <span class="text-sm font-semibold text-slate-400">ta</span></div>
+          <div class="flex items-center gap-2 mt-2 text-xs font-semibold text-emerald-600">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>{{ active_orgs }} ta faol</span>
+            {% if suspended_orgs %}
+            <span class="text-rose-500">({{ suspended_orgs }} to'xtatilgan)</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-xl">
+          <i class="fa-solid fa-building-columns"></i>
+        </div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-slate-100 flex justify-between text-xs text-slate-500 font-medium">
+        <span>Do'konlar: <b class="text-slate-800">{{ retail_orgs }}</b></span>
+        <span>Markazlar: <b class="text-slate-800">{{ edu_orgs }}</b></span>
+      </div>
+    </div>
+
+    <!-- Card 2: Total Debt -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Umumiy Nasiya Qarz</div>
+          <div class="text-2xl font-black text-rose-600 mt-2 tracking-tight">{{ total_debt_amount }} <span class="text-xs font-bold text-slate-400">UZS</span></div>
+          <div class="flex items-center gap-1.5 mt-2 text-xs font-semibold text-rose-500">
+            <i class="fa-solid fa-users text-[10px]"></i>
+            <span>{{ active_debtors_count }} ta qarzdor mijozda</span>
+          </div>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 text-xl">
+          <i class="fa-solid fa-receipt"></i>
+        </div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 font-medium flex justify-between">
+        <span>Mijozlar bazasi:</span>
+        <b class="text-slate-800">{{ total_customers_count }} ta ro'yxatda</b>
+      </div>
+    </div>
+
+    <!-- Card 3: Today's Collections -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Bugungi Tushumlar</div>
+          <div class="text-2xl font-black text-emerald-600 mt-2 tracking-tight">{{ today_collections }} <span class="text-xs font-bold text-slate-400">UZS</span></div>
+          <div class="flex items-center gap-1.5 mt-2 text-xs font-semibold text-emerald-600">
+            <i class="fa-solid fa-circle-check text-[10px]"></i>
+            <span>Bugun so'ndirilgan to'lovlar</span>
+          </div>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 text-xl">
+          <i class="fa-solid fa-money-bill-wave"></i>
+        </div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 font-medium flex justify-between">
+        <span>Jami undirilgan:</span>
+        <b class="text-slate-800">{{ total_collections_all_time }} UZS</b>
+      </div>
+    </div>
+
+    <!-- Card 4: System Modules -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Tizim Modullari & Xodimlar</div>
+          <div class="text-3xl font-black text-indigo-600 mt-2 tracking-tight">{{ active_modules }} / {{ total_modules }}</div>
+          <div class="flex items-center gap-1.5 mt-2 text-xs font-semibold text-indigo-600">
+            <i class="fa-solid fa-user-shield text-[10px]"></i>
+            <span>{{ total_users }} ta xodim va admin</span>
+          </div>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 text-xl">
+          <i class="fa-solid fa-cubes-stacked"></i>
+        </div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 font-medium flex justify-between">
+        <span>Katalog:</span>
+        <b class="text-slate-800">Retail (6) • Education (8)</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real Interactive Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Chart 1: Financial Flow (7 Days) -->
+    <div class="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="text-base font-extrabold text-slate-900">Moliyaviy Oqim Dinamikasi (So'nggi 7 kun)</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Nasiyaga berilgan qarzlar va undirilgan to'lovlar taqqoslanishi</p>
+        </div>
+        <div class="flex items-center gap-4 text-xs font-semibold">
+          <div class="flex items-center gap-1.5 text-rose-600">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span>Nasiyalar</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-emerald-600">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span>Undirilgan to'lovlar</span>
+          </div>
+        </div>
+      </div>
+      <div class="h-64">
+        <canvas id="financialFlowChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Chart 2: Vertical Distribution -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+      <div>
+        <h3 class="text-base font-extrabold text-slate-900">Biznes Sohalari Taqsimoti</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Ro'yxatdan o'tgan korxonalar bo'yicha</p>
+      </div>
+      <div class="h-48 my-auto relative flex items-center justify-center">
+        <canvas id="verticalsChart"></canvas>
+      </div>
+      <div class="pt-4 border-t border-slate-100 flex justify-around text-xs font-bold text-center">
+        <div>
+          <div class="text-emerald-600 text-lg">{{ retail_orgs_count }}</div>
+          <div class="text-slate-400 font-medium">Do'konlar (Retail)</div>
+        </div>
+        <div>
+          <div class="text-indigo-600 text-lg">{{ edu_orgs_count }}</div>
+          <div class="text-slate-400 font-medium">O'quv Markazlari</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Organizations Management Section -->
+  <div id="tashkilotlar" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <!-- Header with Filters -->
+    <div class="p-6 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <h2 class="text-lg font-black text-slate-900">Tashkilotlar & Do'konlar Boshqaruvi</h2>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">{{ total_orgs }} ta</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">Har bir korxonaning holati, biriktirilgan modullari va balansini boshqaring</p>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+          <button onclick="filterOrgs('all')" class="org-filter-btn px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-900 transition" data-filter="all">Barchasi</button>
+          <button onclick="filterOrgs('retail_store')" class="org-filter-btn px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition" data-filter="retail_store">Do'konlar</button>
+          <button onclick="filterOrgs('education_center')" class="org-filter-btn px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition" data-filter="education_center">O'quv Markazlari</button>
+          <button onclick="filterOrgs('active')" class="org-filter-btn px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition" data-filter="active">Faollar</button>
+          <button onclick="filterOrgs('suspended')" class="org-filter-btn px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition" data-filter="suspended">To'xtatilgan</button>
+        </div>
+        <button onclick="openCreateOrgModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm transition flex items-center gap-1.5">
+          <i class="fa-solid fa-plus"></i>
+          <span>Qo'shish</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse text-xs" id="orgs-table">
+        <thead class="bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+          <tr>
+            <th class="py-3.5 px-6">Tashkilot Nomi</th>
+            <th class="py-3.5 px-4">Biznes Turi</th>
+            <th class="py-3.5 px-4">Holat</th>
+            <th class="py-3.5 px-4">Faol Modullar</th>
+            <th class="py-3.5 px-4">Umumiy Nasiya Qarz</th>
+            <th class="py-3.5 px-6 text-right">Amallar</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for item in org_data %}
+          <tr class="hover:bg-slate-50/60 transition org-row" data-type="{{ item.obj.business_type.code }}" data-status="{{ item.obj.status }}">
+            <td class="py-4 px-6">
+              <div class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <span>{{ item.obj.name }}</span>
+                {% if item.obj.business_type.code == 'retail_store' %}
+                  <span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-700 font-semibold">POS</span>
+                {% else %}
+                  <span class="px-1.5 py-0.5 rounded text-[10px] bg-indigo-100 text-indigo-700 font-semibold">Edu</span>
+                {% endif %}
+              </div>
+              <div class="text-[11px] text-slate-400 mt-0.5">
+                {{ item.obj.phone|default:"Telefon ko'rsatilmagan" }} • {{ item.obj.address|default:"Manzil kiritilmagan" }}
+              </div>
+            </td>
+
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold {% if item.obj.business_type.code == 'retail_store' %}bg-emerald-50 text-emerald-700 border border-emerald-200/60{% else %}bg-indigo-50 text-indigo-700 border border-indigo-200/60{% endif %}">
+                {{ item.obj.business_type.name }}
+              </span>
+            </td>
+
+            <td class="py-4 px-4">
+              <button onclick="toggleOrgStatus('{{ item.obj.id }}', this)" class="status-btn px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 transition {% if item.obj.status == 'active' %}bg-emerald-100 text-emerald-800 hover:bg-emerald-200{% else %}bg-rose-100 text-rose-800 hover:bg-rose-200{% endif %}" title="Holatni almashtirish">
+                <span class="w-1.5 h-1.5 rounded-full {% if item.obj.status == 'active' %}bg-emerald-500{% else %}bg-rose-500{% endif %}"></span>
+                <span class="status-text">{% if item.obj.status == 'active' %}Faol{% else %}To'xtatilgan{% endif %}</span>
+              </button>
+            </td>
+
+            <td class="py-4 px-4 max-w-xs">
+              <div class="flex items-center gap-1 flex-wrap">
+                {% for ent in item.all_entitlements %}
+                  {% if ent.is_enabled %}
+                  <span class="px-2 py-0.5 text-[10px] font-semibold rounded bg-slate-100 text-slate-700 border border-slate-200/60" title="{{ ent.module.name }}">
+                    {{ ent.module.code }}
+                  </span>
+                  {% endif %}
+                {% empty %}
+                  <span class="text-slate-400 text-xs italic">Modullar yo'q</span>
+                {% endfor %}
+              </div>
+            </td>
+
+            <td class="py-4 px-4">
+              <div class="font-extrabold text-slate-900 text-xs">{{ item.total_debt|floatformat:2 }} <span class="text-[10px] text-slate-400 font-semibold">{{ item.obj.currency }}</span></div>
+              <div class="text-[10px] text-slate-400">{{ item.debtors_count }} ta mijoz qarzdor</div>
+            </td>
+
+            <td class="py-4 px-6 text-right space-x-2">
+              <button onclick="openManageModulesModal('{{ item.obj.id }}', '{{ item.obj.name|escapejs }}')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+                <i class="fa-solid fa-puzzle-piece text-slate-500 mr-1"></i>
+                Modullar
+              </button>
+
+              {% if item.obj.business_type.code == 'retail_store' %}
+              <a href="http://127.0.0.1:3000/debts" target="_blank" class="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition">
+                POS
+              </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="py-12 text-center text-slate-400 text-sm">
+              Hozircha tashkilotlar ro'yxati bo'sh. "+ Yangi Do'kon Qo'shish" tugmasini bosing.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Live Transactions & Modules Matrix Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Live Debts & Repayments Feed -->
+    <div id="nasiyalar" class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-extrabold text-slate-900">Jonli Nasiyalar & To'lovlar Oqimi</h3>
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Kassalarda sodir bo'layotgan so'nggi operatsiyalar</p>
+        </div>
+        <a href="http://127.0.0.1:3000/debts" target="_blank" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+          <span>POS Kassa Oynasi</span>
+          <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        </a>
+      </div>
+
+      <div class="space-y-3">
+        {% for d in recent_debts %}
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/60 transition">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0">
+              <i class="fa-solid fa-arrow-up"></i>
+            </div>
+            <div>
+              <div class="font-bold text-slate-900 text-xs">{{ d.customer.full_name }}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">{{ d.company.name }} • {{ d.description|truncatewords:4 }}</div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="font-extrabold text-rose-600 text-xs">+{{ d.amount }} UZS</div>
+            <div class="text-[10px] text-slate-400 font-medium">{{ d.created_at|date:"d.m.Y H:i" }}</div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-8 text-slate-400 text-xs">Hozircha nasiya operatsiyalari yo'q.</div>
+        {% endfor %}
+
+        {% for r in recent_repayments %}
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100 hover:bg-emerald-50 transition">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-200/80 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0">
+              <i class="fa-solid fa-arrow-down"></i>
+            </div>
+            <div>
+              <div class="font-bold text-slate-900 text-xs">{{ r.customer.full_name }}</div>
+              <div class="text-[11px] text-emerald-700 mt-0.5">{{ r.company.name }} • To'lov ({{ r.payment_method|upper }})</div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="font-extrabold text-emerald-600 text-xs">-{{ r.amount }} UZS</div>
+            <div class="text-[10px] text-slate-400 font-medium">{{ r.created_at|date:"d.m.Y H:i" }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- System Modules Matrix -->
+    <div id="modullar" class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-base font-extrabold text-slate-900">Modullar Katalogi & Moslik Matritsasi</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Platformada mavjud 14 ta mustaqil biznes moduli</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">14 Modul</span>
+        </div>
+
+        <div class="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+          {% for bt in business_types %}
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50">
+            <div class="flex items-center justify-between mb-2">
+              <div class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <i class="fa-solid {% if bt.code == 'retail_store' %}fa-shop text-emerald-600{% else %}fa-graduation-cap text-indigo-600{% endif %}"></i>
+                <span>{{ bt.name }}</span>
+              </div>
+              <code class="px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-700 font-mono">{{ bt.code }}</code>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">{{ bt.description }}</p>
+
+            <div class="flex gap-1.5 flex-wrap">
+              {% for m in bt.module_mappings.all %}
+              <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold {% if m.is_mandatory %}bg-rose-50 text-rose-700 border border-rose-200/60{% elif m.is_default %}bg-emerald-50 text-emerald-700 border border-emerald-200/60{% else %}bg-slate-100 text-slate-700 border border-slate-200/60{% endif %}" title="{{ m.module.description }}">
+                {{ m.module.name }} {% if m.is_mandatory %}<span class="text-rose-500 font-black">*</span>{% endif %}
+              </span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span> Majburiy modul
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Boshlang'ich faol
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-slate-400"></span> Qo'shimcha
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit and Security Log -->
+  <div id="audit" class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="text-base font-extrabold text-slate-900">Xavfsizlik & Tizim Audit Jurnali</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Platformadagi barcha muhim operatsiyalar va o'zgarishlar tarixi</p>
+      </div>
+      <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-slate-100 text-slate-600">O'chmas audit</span>
+    </div>
+
+    <div class="space-y-2">
+      {% for event in audit_logs %}
+      <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+        <div class="flex items-center gap-3">
+          <i class="fa-solid fa-fingerprint text-slate-400 text-sm"></i>
+          <div>
+            <span class="font-bold text-slate-800">{{ event.action }}</span>
+            <span class="text-slate-400 ml-2">({{ event.company.name }})</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 text-[11px] text-slate-400">
+          <span>Ijrochi: <b class="text-slate-700">{{ event.actor.email|default:"Tizim" }}</b></span>
+          <span>{{ event.created_at|date:"d.m.Y H:i" }}</span>
+        </div>
+      </div>
+      {% empty %}
+      <div class="text-center py-6 text-slate-400 text-xs">Yangi audit yozuvlari mavjud emas.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal 1: Create Organization -->
+<div id="createOrgModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl max-w-lg w-full p-8 border border-slate-200 shadow-2xl relative">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h3 class="text-xl font-black text-slate-900">Yangi Tashkilot Qo'shish</h3>
+        <p class="text-xs text-slate-400 mt-0.5">SaaS platformaga yangi do'kon yoki o'quv markazini biriktirish</p>
+      </div>
+      <button onclick="closeCreateOrgModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+
+    <form id="createOrgForm" onsubmit="submitCreateOrg(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Tashkilot / Do'kon Nomi *</label>
+        <input type="text" id="org_name" required placeholder="Masalan: Anor Supermarket" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 focus:bg-white outline-none font-medium">
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Biznes Turi (Soha) *</label>
+        <select id="org_business_type" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 focus:bg-white outline-none font-medium">
+          {% for bt in business_types %}
+          <option value="{{ bt.code }}">{{ bt.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Telefon Raqam</label>
+          <input type="text" id="org_phone" placeholder="+998901234567" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 focus:bg-white outline-none font-medium">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Valyuta</label>
+          <input type="text" id="org_currency" value="UZS" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 focus:bg-white outline-none font-medium">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Manzil</label>
+        <input type="text" id="org_address" placeholder="Toshkent, Chilonzor 7-mavze" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 focus:bg-white outline-none font-medium">
+      </div>
+
+      <div class="pt-4 flex items-center justify-end gap-3">
+        <button type="button" onclick="closeCreateOrgModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">
+          Bekor qilish
+        </button>
+        <button type="submit" id="createOrgSubmitBtn" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition flex items-center gap-2">
+          <i class="fa-solid fa-check"></i>
+          <span>Yaratish & Faollashtirish</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 2: Manage Modules for Organization -->
+<div id="manageModulesModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl max-w-2xl w-full p-8 border border-slate-200 shadow-2xl relative max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+      <div>
+        <h3 class="text-xl font-black text-slate-900" id="modalOrgTitle">Modullarni Boshqarish</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Tashkilot uchun tizim modullarini yoqish yoki o'chirish</p>
+      </div>
+      <button onclick="closeManageModulesModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+
+    <div class="overflow-y-auto py-6 space-y-3 custom-scrollbar flex-1" id="modulesListContainer">
+      <!-- Injected dynamically via JS -->
+    </div>
+
+    <div class="pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
+      <span>* Modulni o'chirish uning tarixiy ma'lumotlarini o'chirmaydi.</span>
+      <button onclick="closeManageModulesModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition">
+        Tayyor
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="fixed bottom-6 right-6 z-50 hidden px-5 py-3 rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-800 text-xs font-bold flex items-center gap-3 transition-all duration-300">
+  <span id="toastIcon"></span>
+  <span id="toastMessage"></span>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Financial Flow Chart (Chart.js)
+  const ctx = document.getElementById('financialFlowChart').getContext('2d');
+  const labels = {{ chart_labels_json|safe }};
+  const debtsData = {{ chart_debts_json|safe }};
+  const repaymentsData = {{ chart_repayments_json|safe }};
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Yangi Nasiyalar (UZS)',
+          data: debtsData,
+          borderColor: '#f43f5e',
+          backgroundColor: 'rgba(244, 63, 94, 0.08)',
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#f43f5e',
+        },
+        {
+          label: 'Undirilgan To\'lovlar (UZS)',
+          data: repaymentsData,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.08)',
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#10b981',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: '#f1f5f9' },
+          ticks: {
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 10 },
+            callback: value => value >= 1000000 ? (value/1000000).toFixed(1) + 'M' : value >= 1000 ? (value/1000).toFixed(0) + 'k' : value
+          }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: "'Plus Jakarta Sans', sans-serif", size: 10 } }
+        }
+      }
+    }
+  });
+
+  // Verticals Doughnut Chart
+  const vCtx = document.getElementById('verticalsChart').getContext('2d');
+  new Chart(vCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ["Do'konlar (Retail)", "O'quv Markazlari"],
+      datasets: [{
+        data: [{{ retail_orgs_count }}, {{ edu_orgs_count }}],
+        backgroundColor: ['#10b981', '#6366f1'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: "'Plus Jakarta Sans'", size: 11 } } }
+      },
+      cutout: '72%'
+    }
+  });
+
+  // Filter organizations table
+  function filterOrgs(type) {
+    document.querySelectorAll('.org-filter-btn').forEach(btn => {
+      if (btn.dataset.filter === type) {
+        btn.classList.add('bg-white', 'shadow-sm', 'text-slate-900');
+        btn.classList.remove('text-slate-600');
+      } else {
+        btn.classList.remove('bg-white', 'shadow-sm', 'text-slate-900');
+        btn.classList.add('text-slate-600');
+      }
+    });
+
+    document.querySelectorAll('.org-row').forEach(row => {
+      const rowType = row.dataset.type;
+      const rowStatus = row.dataset.status;
+      if (type === 'all') {
+        row.style.display = '';
+      } else if (type === 'active' || type === 'suspended') {
+        row.style.display = rowStatus === type ? '' : 'none';
+      } else {
+        row.style.display = rowType === type ? '' : 'none';
+      }
+    });
+  }
+
+  // Global search input
+  document.getElementById('global-search').addEventListener('input', function(e) {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('.org-row').forEach(row => {
+      const text = row.innerText.toLowerCase();
+      row.style.display = text.includes(q) ? '' : 'none';
+    });
+  });
+
+  // Toast notification
+  function showToast(msg, isSuccess = true) {
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+    const toastIcon = document.getElementById('toastIcon');
+
+    toastMessage.innerText = msg;
+    toastIcon.innerHTML = isSuccess 
+      ? '<i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>' 
+      : '<i class="fa-solid fa-triangle-exclamation text-rose-400 text-base"></i>';
+
+    toast.classList.remove('hidden');
+    setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 3500);
+  }
+
+  // Toggle Organization Status via AJAX
+  async function toggleOrgStatus(orgId, btn) {
+    try {
+      const resp = await fetch(`/admin/api/organizations/${orgId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await resp.json();
+      if (data.status === 'success') {
+        const row = btn.closest('.org-row');
+        row.dataset.status = data.new_status;
+        const textSpan = btn.querySelector('.status-text');
+        const dot = btn.querySelector('span');
+
+        if (data.new_status === 'active') {
+          btn.className = 'status-btn px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 transition bg-emerald-100 text-emerald-800 hover:bg-emerald-200';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+          textSpan.innerText = 'Faol';
+          showToast('Tashkilot faollashtirildi!', true);
+        } else {
+          btn.className = 'status-btn px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 transition bg-rose-100 text-rose-800 hover:bg-rose-200';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+          textSpan.innerText = "To'xtatilgan";
+          showToast('Tashkilot vaqtincha to\'xtatildi.', false);
+        }
+      } else {
+        showToast(data.message || 'Xatolik yuz berdi', false);
+      }
+    } catch (err) {
+      showToast('Server bilan aloqa uzildi.', false);
+    }
+  }
+
+  // Modals Management
+  function openCreateOrgModal() {
+    document.getElementById('createOrgModal').classList.remove('hidden');
+  }
+  function closeCreateOrgModal() {
+    document.getElementById('createOrgModal').classList.add('hidden');
+  }
+
+  async function submitCreateOrg(e) {
+    e.preventDefault();
+    const btn = document.getElementById('createOrgSubmitBtn');
+    btn.disabled = true;
+    btn.innerText = 'Yaratilmoqda...';
+
+    const payload = {
+      name: document.getElementById('org_name').value,
+      business_type: document.getElementById('org_business_type').value,
+      phone: document.getElementById('org_phone').value,
+      currency: document.getElementById('org_currency').value,
+      address: document.getElementById('org_address').value,
+    };
+
+    try {
+      const resp = await fetch('/admin/api/organizations/create/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.status === 'success') {
+        showToast(data.message, true);
+        closeCreateOrgModal();
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        showToast(data.message || 'Xatolik yuz berdi', false);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check mr-1.5"></i> Yaratish & Faollashtirish';
+      }
+    } catch (err) {
+      showToast('Xatolik yuz berdi', false);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check mr-1.5"></i> Yaratish & Faollashtirish';
+    }
+  }
+
+  // Modules Modal
+  const allModulesCatalog = [
+    {% for m in all_modules %}
+    {
+      code: "{{ m.code }}",
+      name: "{{ m.name|escapejs }}",
+      category: "{{ m.category }}",
+      description: "{{ m.description|escapejs }}",
+      dependsOn: "{{ m.depends_on.code|default:'' }}"
+    },
+    {% endfor %}
+  ];
+
+  const orgsEntitlements = {
+    {% for item in org_data %}
+    "{{ item.obj.id }}": {{ item.enabled_modules|safe }},
+    {% endfor %}
+  };
+
+  let currentManagingOrgId = null;
+
+  function openManageModulesModal(orgId, orgName) {
+    currentManagingOrgId = orgId;
+    document.getElementById('modalOrgTitle').innerText = `${orgName} — Modullari`;
+    const container = document.getElementById('modulesListContainer');
+    container.innerHTML = '';
+
+    const enabledList = orgsEntitlements[orgId] || [];
+
+    allModulesCatalog.forEach(mod => {
+      const isChecked = enabledList.includes(mod.code);
+      const div = document.createElement('div');
+      div.className = 'p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-center justify-between gap-4';
+      div.innerHTML = `
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-xs text-slate-900">${mod.name}</span>
+            <code class="px-1.5 py-0.5 rounded text-[10px] bg-slate-200 font-mono text-slate-700">${mod.code}</code>
+            ${mod.dependsOn ? `<span class="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Bog'liq: ${mod.dependsOn}</span>` : ''}
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">${mod.description}</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer shrink-0">
+          <input type="checkbox" onchange="toggleModuleForCurrentOrg('${mod.code}', this)" class="sr-only peer" ${isChecked ? 'checked' : ''}>
+          <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+        </label>
+      `;
+      container.appendChild(div);
+    });
+
+    document.getElementById('manageModulesModal').classList.remove('hidden');
+  }
+
+  function closeManageModulesModal() {
+    document.getElementById('manageModulesModal').classList.add('hidden');
+  }
+
+  async function toggleModuleForCurrentOrg(moduleCode, checkbox) {
+    if (!currentManagingOrgId) return;
+
+    try {
+      const resp = await fetch(`/admin/api/organizations/${currentManagingOrgId}/toggle-module/`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ module_code: moduleCode })
+      });
+      const data = await resp.json();
+      if (data.status === 'success') {
+        checkbox.checked = data.is_enabled;
+        // update local list
+        if (!orgsEntitlements[currentManagingOrgId]) orgsEntitlements[currentManagingOrgId] = [];
+        if (data.is_enabled) {
+          if (!orgsEntitlements[currentManagingOrgId].includes(moduleCode)) {
+            orgsEntitlements[currentManagingOrgId].push(moduleCode);
+          }
+          showToast(`'${moduleCode}' moduli yoqildi.`, true);
+        } else {
+          orgsEntitlements[currentManagingOrgId] = orgsEntitlements[currentManagingOrgId].filter(c => c !== moduleCode);
+          showToast(`'${moduleCode}' moduli o'chirildi.`, false);
+        }
+      } else {
+        checkbox.checked = !checkbox.checked;
+        showToast(data.message || 'Xatolik', false);
+      }
+    } catch (err) {
+      checkbox.checked = !checkbox.checked;
+      showToast('Aloqa xatosi', false);
+    }
+  }
+</script>
+{% endblock %}

@@ -1,6 +1,7 @@
 import uuid
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.views import APIView
@@ -34,7 +35,10 @@ class DebtCustomerListCreateView(APIView):
         search = request.query_params.get('search')
         if search:
             customers = customers.filter(
-                Q(full_name__icontains=search) | Q(phone_number__icontains=search)
+                Q(full_name__icontains=search) | 
+                Q(first_name__icontains=search) | 
+                Q(last_name__icontains=search) | 
+                Q(phone_number__icontains=search)
             )
 
         has_debt = request.query_params.get('has_debt')
@@ -55,10 +59,36 @@ class DebtCustomerListCreateView(APIView):
             )
         serializer = CreateDebtCustomerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        customer = DebtCustomer.objects.create(
-            company=request.company,
-            **serializer.validated_data
-        )
+        
+        initial_debt = serializer.validated_data.pop('initial_debt', Decimal('0.00'))
+        with transaction.atomic():
+            customer = DebtCustomer.objects.create(
+                company=request.company,
+                **serializer.validated_data
+            )
+            if initial_debt and initial_debt > Decimal('0.00'):
+                debt = DebtRecord.objects.create(
+                    company=request.company,
+                    customer=customer,
+                    amount=initial_debt,
+                    remaining_unpaid=initial_debt,
+                    description="Boshlang'ich qarz balansi (Mijoz ochilgandagi qarz)",
+                    status=DebtRecord.STATUS_PENDING,
+                    recorded_by=request.user if request.user.is_authenticated else None
+                )
+                customer.current_balance = initial_debt
+                customer.save(update_fields=['current_balance'])
+
+                DebtLedger.objects.create(
+                    company=request.company,
+                    customer=customer,
+                    transaction_type=DebtLedger.TYPE_DEBT_ISSUED,
+                    amount=initial_debt,
+                    balance_before=Decimal('0.00'),
+                    balance_after=initial_debt,
+                    reference_id=debt.id
+                )
+
         return Response(DebtCustomerSerializer(customer).data, status=status.HTTP_201_CREATED)
 
 class DebtCustomerDetailView(APIView):

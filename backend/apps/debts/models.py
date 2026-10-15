@@ -16,6 +16,8 @@ class DebtCustomer(CompanyScopedModel):
         (STATUS_ARCHIVED, 'Archived'),
     ]
 
+    first_name = models.CharField(max_length=128, blank=True, default='', db_index=True)
+    last_name = models.CharField(max_length=128, blank=True, default='', db_index=True)
     full_name = models.CharField(max_length=255, db_index=True)
     phone_number = models.CharField(max_length=32, db_index=True)
     address = models.CharField(max_length=512, blank=True)
@@ -50,6 +52,15 @@ class DebtCustomer(CompanyScopedModel):
                 name='debt_customer_credit_limit_non_negative'
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        if not self.first_name and not self.last_name and self.full_name:
+            parts = self.full_name.strip().split(' ', 1)
+            self.first_name = parts[0]
+            self.last_name = parts[1] if len(parts) > 1 else ''
+        elif self.first_name or self.last_name:
+            self.full_name = f"{self.first_name} {self.last_name}".strip()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.full_name} ({self.phone_number}) - Balance: {self.current_balance}"

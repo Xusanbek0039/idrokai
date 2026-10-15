@@ -11,6 +11,8 @@ class DebtCustomerSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'company_id',
+            'first_name',
+            'last_name',
             'full_name',
             'phone_number',
             'address',
@@ -24,17 +26,34 @@ class DebtCustomerSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'company_id', 'current_balance', 'created_at', 'updated_at']
 
 class CreateDebtCustomerSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(max_length=128, required=False, allow_blank=True, default='')
+    last_name = serializers.CharField(max_length=128, required=False, allow_blank=True, default='')
+    full_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
     credit_limit = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
+    initial_debt = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'), write_only=True)
 
     class Meta:
         model = DebtCustomer
         fields = [
+            'first_name',
+            'last_name',
             'full_name',
             'phone_number',
             'address',
             'credit_limit',
+            'initial_debt',
             'notes',
         ]
+
+    def validate(self, attrs):
+        first_name = attrs.get('first_name', '').strip()
+        last_name = attrs.get('last_name', '').strip()
+        full_name = attrs.get('full_name', '').strip()
+        if not full_name and not (first_name or last_name):
+            raise serializers.ValidationError({"first_name": "Mijozning ismi yoki to'liq ismi kiritilishi shart."})
+        if not full_name:
+            attrs['full_name'] = f"{first_name} {last_name}".strip()
+        return attrs
 
 class DebtRecordSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.full_name', read_only=True)

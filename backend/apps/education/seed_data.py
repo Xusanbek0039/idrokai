@@ -220,6 +220,7 @@ def run_seed():
                 'group': sd['group'],
                 'balance': sd['balance'],
                 'attendance_rate': sd['attendance_rate'],
+                'password_text': '12345678',
                 'xp': sd['xp'],
                 'coins': sd['coins'],
                 'is_active': True,

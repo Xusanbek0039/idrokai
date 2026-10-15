@@ -97,8 +97,6 @@ class EducationCreateStudentSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=128, required=False, default='12345678')
     group_id = serializers.UUIDField(required=False, allow_null=True)
     initial_payment = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
-    group_id = serializers.UUIDField(required=False, allow_null=True)
-    initial_payment = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
 
 
 class EducationTuitionPaymentSerializer(serializers.ModelSerializer):

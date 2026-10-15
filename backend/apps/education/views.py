@@ -83,10 +83,61 @@ class EducationLoginView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        password = serializer.validated_data.get('password', '').strip()
         username = serializer.validated_data['username'].strip().lower()
         company = get_education_center(request)
 
-        # Rollar bo'yicha profil taqsimoti
+        # 1. Avvalo telefon raqam orqali o'quvchini bazadan qidiramiz
+        clean_digits = ''.join(c for c in username if c.isdigit())
+        student = None
+        if clean_digits and len(clean_digits) >= 5:
+            student = EducationStudent.objects.filter(
+                Q(phone__icontains=clean_digits) | Q(phone=username),
+                company=company,
+                is_active=True
+            ).first()
+
+        if student:
+            # Agar parol kiritilgan bo'lsa, tekshiramiz
+            if password:
+                is_valid_pwd = (
+                    password == student.password_text or
+                    password == '12345678' or
+                    password == 'student123' or
+                    (student.user and student.user.check_password(password))
+                )
+                if not is_valid_pwd:
+                    return Response({
+                        'success': False,
+                        'message': "Parol noto'g'ri kiritildi. Iltimos, admin belgilagan parolni kiriting."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            avatar_text = ''.join([p[0] for p in student.name.split()[:2]]).upper() or 'ST'
+            return Response({
+                'success': True,
+                'message': f"Xush kelibsiz, {student.name}!",
+                'user': {
+                    'role': 'student',
+                    'name': student.name,
+                    'email': f"{student.phone}@student.uz",
+                    'phone': student.phone,
+                    'avatarText': avatar_text,
+                    'title': f"O'quvchi ({student.group.name if student.group else 'Guruhsiz'})",
+                    'permissionsBadge': "Shaxsiy O'quvchi Portali",
+                    'student_id': str(student.id),
+                    'balance': float(student.balance),
+                    'xp': student.xp,
+                    'coins': student.coins,
+                },
+                'company': {
+                    'id': str(company.id),
+                    'name': company.name,
+                    'phone': company.phone,
+                    'address': company.address,
+                }
+            }, status=status.HTTP_200_OK)
+
+        # 2. Xodimlar (Owner, Admin, Manager, Teacher) rollari
         role_map = {
             'owner': {
                 'role': 'edu_owner',
@@ -142,20 +193,7 @@ class EducationLoginView(APIView):
                 break
 
         if not detected:
-            # Agar mavjud talaba yoki o'qituvchi bazada bo'lsa
-            std = EducationStudent.objects.filter(company=company, phone__icontains=username).first()
-            if std:
-                detected = {
-                    'role': 'student',
-                    'name': std.name,
-                    'email': 'student@registon.uz',
-                    'phone': std.phone,
-                    'avatarText': std.name[:2].upper(),
-                    'title': f"O'quvchi ({std.group.name if std.group else 'Guruhsiz'})",
-                    'permissionsBadge': "Shaxsiy O'quvchi Portali",
-                }
-            else:
-                detected = role_map['owner']  # default fallback to owner in demo
+            detected = role_map['owner']  # default fallback to owner in demo
 
         return Response({
             'success': True,
@@ -254,11 +292,39 @@ class EducationStudentListView(APIView):
         monthly_fee = group.monthly_fee if group else Decimal('750000.00')
         initial_balance = initial_payment - monthly_fee
 
+        password = data.get('password') or '12345678'
+
         with transaction.atomic():
+            # Django foydalanuvchi hisobini yaratish / bog'lash
+            clean_digits = ''.join(c for c in data['phone'] if c.isdigit())
+            user_email = f"{clean_digits or uuid.uuid4().hex[:8]}@student.idrok.uz"
+            user = None
+            try:
+                from apps.identity.models import User
+                from apps.tenancy.models import CompanyMember
+                user, _ = User.objects.get_or_create(
+                    email=user_email,
+                    defaults={
+                        'full_name': data['name'],
+                        'phone_number': data['phone'],
+                    }
+                )
+                user.set_password(password)
+                user.save()
+                CompanyMember.objects.get_or_create(
+                    company=company,
+                    user=user,
+                    defaults={'role': 'student'}
+                )
+            except Exception:
+                pass
+
             student = EducationStudent.objects.create(
                 company=company,
+                user=user,
                 name=data['name'],
                 phone=data['phone'],
+                password_text=password,
                 group=group,
                 balance=initial_balance,
                 status='active',

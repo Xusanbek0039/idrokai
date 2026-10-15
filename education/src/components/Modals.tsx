@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { mockGroups, mockStudents } from '../data/mockData';
 import { formatMoney } from '../lib/format';
 import { educationApi } from '../lib/api';
-import { X, CheckCircle, CreditCard, UserPlus, FileUp } from 'lucide-react';
+import { X, CheckCircle, CreditCard, UserPlus, FileUp, Lock, Eye, EyeOff, Key } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -17,6 +17,8 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
   const { t } = useLanguage();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+998 9');
+  const [password, setPassword] = useState('12345678');
+  const [showPassword, setShowPassword] = useState(false);
   const [group, setGroup] = useState(mockGroups[0]?.name || '');
   const [initialPayment, setInitialPayment] = useState('');
 
@@ -24,17 +26,35 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const selectedGrp = mockGroups.find((g) => g.name === group);
+    const newStudentObj = {
+      id: `std-${Date.now()}`,
+      name,
+      phone,
+      groupName: group,
+      course: selectedGrp?.course || "Ingliz tili",
+      balance: (initialPayment ? Number(initialPayment) : 0) - (selectedGrp?.monthlyFee || 750000),
+      attendanceRate: 100,
+      status: 'active' as const,
+      password,
+      xp: 100,
+      coins: 10,
+      joinedDate: new Date().toISOString().split('T')[0],
+    };
+
     try {
-      const selectedGrp = mockGroups.find((g) => g.name === group);
       await educationApi.createStudent({
         name,
         phone,
+        password,
         group_id: selectedGrp?.id,
         initial_payment: initialPayment ? Number(initialPayment) : 0,
       });
-      alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi (Django Backend):\n${name} (${phone})\nGuruh: ${group}`);
+      mockStudents.unshift(newStudentObj);
+      alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi!\n\n📋 Login (Telefon): ${phone}\n🔑 Parol: ${password}\n🏫 Guruh: ${group}\n\nO'quvchi ushbu ma'lumotlar bilan o'z shaxsiy portaliga kira oladi.`);
     } catch {
-      alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi:\n${name} (${phone})\nGuruh: ${group}`);
+      mockStudents.unshift(newStudentObj);
+      alert(`O'quvchi ro'yxatga olindi (Lokal rejimda saqlandi):\n\n📋 Login (Telefon): ${phone}\n🔑 Parol: ${password}\n🏫 Guruh: ${group}\n\nO'quvchi ushbu login va parol bilan tizimga kira oladi.`);
     }
     onClose();
   };
@@ -69,7 +89,7 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
 
           <div>
             <label className="block font-semibold text-slate-700 dark:text-slate-300">
-              {t.modals.phone}
+              {t.modals.phone} (O'quvchi Logini)
             </label>
             <input
               type="text"
@@ -78,6 +98,42 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
               onChange={(e) => setPhone(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-900 outline-none focus:border-brand-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Key className="h-3.5 w-3.5 text-brand-600" />
+                <span>Tizimga kirish paroli (Admin belgilaydi)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setPassword(Math.floor(10000000 + Math.random() * 90000000).toString())}
+                className="text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline"
+              >
+                Tasodifiy generatsiya
+              </button>
+            </div>
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Masalan: 12345678"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 pr-10 text-slate-900 font-mono font-bold outline-none focus:border-brand-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+              O'quvchi ushbu telefon raqam (login) va parol bilan o'z shaxsiy portaliga kiradi.
+            </p>
           </div>
 
           <div>

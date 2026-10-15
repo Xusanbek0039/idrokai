@@ -15,6 +15,8 @@ import {
   Phone,
   Mail,
   MoreVertical,
+  Key,
+  Copy,
 } from 'lucide-react';
 import { AddStudentModal, RecordPaymentModal } from '../Modals';
 

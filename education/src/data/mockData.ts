@@ -19,6 +19,7 @@ export interface Student {
   balance: number; // positive = overpaid/credit, negative = debt
   attendanceRate: number; // percentage
   status: 'active' | 'frozen';
+  password?: string;
   xp: number;
   coins: number;
   joinedDate: string;

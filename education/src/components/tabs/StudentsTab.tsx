@@ -152,7 +152,7 @@ export function StudentsTab() {
               <tr className="border-b border-slate-200 text-slate-400 dark:border-slate-800">
                 <th className="pb-3 font-semibold">O'quvchi F.I.Sh</th>
                 <th className="pb-3 font-semibold">Guruh va Kurs</th>
-                <th className="pb-3 font-semibold">Telefon</th>
+                <th className="pb-3 font-semibold">Login & Parol (Portal)</th>
                 <th className="pb-3 font-semibold">To'lov Holati</th>
                 <th className="pb-3 font-semibold">Davomat</th>
                 <th className="pb-3 font-semibold">XP / Tangalar</th>
@@ -171,8 +171,27 @@ export function StudentsTab() {
                       {s.groupName}
                     </span>
                     <div className="text-[10px] text-slate-400">{s.course}</div>
+                  <td className="py-3.5">
+                    <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                      {s.phone}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="font-mono text-[10px] text-brand-600 dark:text-brand-400 font-bold bg-brand-50 dark:bg-brand-950/60 px-1.5 py-0.5 rounded-md border border-brand-200/60 dark:border-brand-800/60">
+                        🔑 {s.password || '12345678'}
+                      </span>
+                      <button
+                        type="button"
+                        title="Login va parolni nusxalash"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`O'quvchi: ${s.name}\nLogin: ${s.phone}\nParol: ${s.password || '12345678'}`);
+                          alert(`Login va parol nusxalandi:\nLogin: ${s.phone}\nParol: ${s.password || '12345678'}`);
+                        }}
+                        className="p-0.5 rounded-md text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
                   </td>
-                  <td className="py-3.5 text-slate-500 font-mono">{s.phone}</td>
                   <td className="py-3.5">
                     {s.balance < 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 font-bold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">

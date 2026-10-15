@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { mockGroups, mockStudents } from '../data/mockData';
+import { formatMoney } from '../lib/format';
 import { X, CheckCircle, CreditCard, UserPlus, FileUp } from 'lucide-react';
 
 interface ModalProps {
@@ -78,7 +79,7 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
             >
               {mockGroups.map((g) => (
                 <option key={g.id} value={g.name}>
-                  {g.name} ({g.monthlyFee.toLocaleString()} so'm/oy)
+                  {g.name} ({formatMoney(g.monthlyFee)} so'm/oy)
                 </option>
               ))}
             </select>
@@ -129,7 +130,7 @@ export function RecordPaymentModal({ isOpen, onClose }: ModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`To'lov muvaffaqiyatli qabul qilindi!\nO'quvchi: ${student}\nSumma: ${Number(amount).toLocaleString()} so'm\nUsul: ${method}`);
+    alert(`To'lov muvaffaqiyatli qabul qilindi!\nO'quvchi: ${student}\nSumma: ${formatMoney(amount)} so'm\nUsul: ${method}`);
     onClose();
   };
 
@@ -158,7 +159,7 @@ export function RecordPaymentModal({ isOpen, onClose }: ModalProps) {
             >
               {mockStudents.map((s) => (
                 <option key={s.id} value={s.name}>
-                  {s.name} ({s.groupName}) - Balans: {s.balance.toLocaleString()} so'm
+                  {s.name} ({s.groupName}) - Balans: {formatMoney(s.balance)} so'm
                 </option>
               ))}
             </select>

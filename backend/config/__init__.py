@@ -1,0 +1,1 @@
+# IDROK AI Django Config

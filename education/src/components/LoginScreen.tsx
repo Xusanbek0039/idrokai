@@ -48,7 +48,7 @@ export function LoginScreen() {
     student: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80',
   };
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -57,7 +57,7 @@ export function LoginScreen() {
       return;
     }
 
-    const success = login(username, password);
+    const success = await login(username, password);
     if (!success) {
       setError(
         language === 'uz'
@@ -67,8 +67,8 @@ export function LoginScreen() {
     }
   };
 
-  const handleQuickLogin = (role: EducationRole) => {
-    login(role);
+  const handleQuickLogin = async (role: EducationRole) => {
+    await login(role);
   };
 
   return (

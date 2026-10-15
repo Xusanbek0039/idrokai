@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { educationApi } from '../lib/api';
 
 export type EducationRole =
   | 'edu_owner'
@@ -112,7 +113,8 @@ interface RoleContextType {
   user: UserProfile;
   isAuthenticated: boolean;
   canControlEverything: boolean;
-  login: (usernameOrRole: string, password?: string) => boolean;
+  backendConnected: boolean;
+  login: (usernameOrRole: string, password?: string) => Promise<boolean>;
   logout: () => void;
   setRole: (role: EducationRole) => void;
 }
@@ -121,29 +123,63 @@ const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRoleState] = useState<EducationRole>('edu_owner');
+  const [userProfile, setUserProfile] = useState<UserProfile>(mockProfiles['edu_owner']);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [hasMounted, setHasMounted] = useState<boolean>(false);
+  const [backendConnected, setBackendConnected] = useState<boolean>(false);
 
   useEffect(() => {
+    // 1. Check local session
     try {
       const savedAuth = localStorage.getItem('idrok_edu_auth');
       if (savedAuth) {
         const parsed = JSON.parse(savedAuth);
         if (parsed.role && mockProfiles[parsed.role as EducationRole]) {
           setRoleState(parsed.role as EducationRole);
+          if (parsed.user) {
+            setUserProfile(parsed.user);
+          } else {
+            setUserProfile(mockProfiles[parsed.role as EducationRole]);
+          }
           setIsAuthenticated(Boolean(parsed.isAuthenticated));
         }
       }
     } catch {
       // ignore
     }
-    setHasMounted(true);
+
+    // 2. Check Backend Health
+    educationApi.checkHealth().then((isHealthy) => {
+      setBackendConnected(isHealthy);
+    });
   }, []);
 
-  const login = (usernameOrRole: string, _password?: string): boolean => {
+  const login = async (usernameOrRole: string, password?: string): Promise<boolean> => {
     const clean = usernameOrRole.trim().toLowerCase();
-    let detectedRole: EducationRole | null = null;
 
+    // 1. Try Backend Django Login
+    try {
+      const res = await educationApi.login(clean, password);
+      if (res && res.success && res.user) {
+        const backendUser = res.user as UserProfile;
+        const assignedRole = backendUser.role as EducationRole;
+        setRoleState(assignedRole);
+        setUserProfile(backendUser);
+        setIsAuthenticated(true);
+        setBackendConnected(true);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(
+            'idrok_edu_auth',
+            JSON.stringify({ role: assignedRole, user: backendUser, isAuthenticated: true })
+          );
+        }
+        return true;
+      }
+    } catch {
+      // Backend not yet reachable or errored, proceed to offline/mock fallback
+    }
+
+    // 2. Local Fallback Mapping
+    let detectedRole: EducationRole | null = null;
     if (clean === 'owner' || clean === 'edu_owner' || clean.includes('sanjar')) {
       detectedRole = 'edu_owner';
     } else if (clean === 'admin' || clean === 'edu_assistant_admin' || clean.includes('aziza')) {
@@ -160,11 +196,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
     if (detectedRole) {
       setRoleState(detectedRole);
+      const prof = mockProfiles[detectedRole];
+      setUserProfile(prof);
       setIsAuthenticated(true);
       if (typeof window !== 'undefined') {
         localStorage.setItem(
           'idrok_edu_auth',
-          JSON.stringify({ role: detectedRole, isAuthenticated: true })
+          JSON.stringify({ role: detectedRole, user: prof, isAuthenticated: true })
         );
       }
       return true;
@@ -184,16 +222,17 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const setRole = (newRole: EducationRole) => {
     setRoleState(newRole);
+    const prof = mockProfiles[newRole];
+    setUserProfile(prof);
     if (typeof window !== 'undefined') {
       localStorage.setItem(
         'idrok_edu_auth',
-        JSON.stringify({ role: newRole, isAuthenticated: true })
+        JSON.stringify({ role: newRole, user: prof, isAuthenticated: true })
       );
     }
   };
 
-  const user = mockProfiles[role];
-  // Boshliq va Yordamchi Admin markazdagi hamma narsani va hamma odamlarni nazorat qila oladi
+  const user = userProfile || mockProfiles[role];
   const canControlEverything = role === 'edu_owner' || role === 'edu_assistant_admin';
 
   return (
@@ -203,6 +242,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         user,
         isAuthenticated,
         canControlEverything,
+        backendConnected,
         login,
         logout,
         setRole,

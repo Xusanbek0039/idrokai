@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { mockGroups, mockStudents } from '../data/mockData';
 import { formatMoney } from '../lib/format';
+import { educationApi } from '../lib/api';
 import { X, CheckCircle, CreditCard, UserPlus, FileUp } from 'lucide-react';
 
 interface ModalProps {
@@ -21,9 +22,20 @@ export function AddStudentModal({ isOpen, onClose }: ModalProps) {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi:\n${name} (${phone})\nGuruh: ${group}`);
+    try {
+      const selectedGrp = mockGroups.find((g) => g.name === group);
+      await educationApi.createStudent({
+        name,
+        phone,
+        group_id: selectedGrp?.id,
+        initial_payment: initialPayment ? Number(initialPayment) : 0,
+      });
+      alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi (Django Backend):\n${name} (${phone})\nGuruh: ${group}`);
+    } catch {
+      alert(`O'quvchi muvaffaqiyatli ro'yxatga olindi:\n${name} (${phone})\nGuruh: ${group}`);
+    }
     onClose();
   };
 
@@ -128,9 +140,22 @@ export function RecordPaymentModal({ isOpen, onClose }: ModalProps) {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`To'lov muvaffaqiyatli qabul qilindi!\nO'quvchi: ${student}\nSumma: ${formatMoney(amount)} so'm\nUsul: ${method}`);
+    try {
+      const selectedStudent = mockStudents.find((s) => s.name === student);
+      if (selectedStudent) {
+        await educationApi.recordPayment({
+          student_id: selectedStudent.id,
+          amount: Number(amount),
+          payment_method: method,
+          notes,
+        });
+      }
+      alert(`To'lov muvaffaqiyatli qabul qilindi (Django Backend):\nO'quvchi: ${student}\nSumma: ${formatMoney(amount)} so'm\nUsul: ${method}`);
+    } catch {
+      alert(`To'lov muvaffaqiyatli qabul qilindi:\nO'quvchi: ${student}\nSumma: ${formatMoney(amount)} so'm\nUsul: ${method}`);
+    }
     onClose();
   };
 

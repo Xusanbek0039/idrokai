@@ -37,4 +37,8 @@ urlpatterns = [
     # 3. Market (Do'kon / Nasiya daftari) APIs
     path('market/', include('apps.market.urls', namespace='market')),
     path('api/v1/market/', include('apps.market.urls', namespace='market_v1')),
+
+    # 4. Education Center (O'quv Markaz) APIs
+    path('api/v1/education/', include('apps.education.urls', namespace='education')),
+    path('education/api/', include('apps.education.urls', namespace='education_direct')),
 ]

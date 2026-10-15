@@ -24,7 +24,7 @@ import {
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
-  const { role, setRole, user, logout, canControlEverything } = useRole();
+  const { role, setRole, user, logout, canControlEverything, backendConnected } = useRole();
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
 
   const roleIcons: Record<EducationRole, React.ReactNode> = {
@@ -68,9 +68,22 @@ export function Header() {
                 PRO
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t.centerName}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t.centerName}
+              </p>
+              {backendConnected ? (
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Django Backend Ulangan
+                </span>
+              ) : (
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  Django API Tayyor
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'apps.knowledge.apps.KnowledgeConfig',
     'apps.assistant.apps.AssistantConfig',
     'apps.operations.apps.OperationsConfig',
+    'apps.education.apps.EducationConfig',
 ]
 
 MIDDLEWARE = [

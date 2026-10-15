@@ -3,30 +3,41 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 241, 245, 249;
+  --foreground: #0f172a;
+  --background: #f8fafc;
+  --card-bg: #ffffff;
+  --border-subtle: #e2e8f0;
 }
 
 .dark {
-  --foreground-rgb: 248, 250, 252;
-  --background-start-rgb: 15, 23, 42;
-  --background-end-rgb: 2, 6, 23;
+  --foreground: #f8fafc;
+  --background: #090d16;
+  --card-bg: #111827;
+  --border-subtle: #1e293b;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--foreground);
+  background-color: var(--background);
   min-height: 100vh;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Custom smooth scrollbar */
+/* Luxury ambient background glows */
+.dark body {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.04) 0px, transparent 50%);
+}
+
+body:not(.dark) {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.03) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.03) 0px, transparent 50%);
+}
+
+/* Custom modern scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -37,7 +48,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.35);
   border-radius: 9999px;
 }
 
@@ -46,5 +57,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.7);
+  background: rgba(148, 163, 184, 0.6);
 }

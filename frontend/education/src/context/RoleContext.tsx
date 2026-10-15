@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type EducationRole =
   | 'edu_owner'
@@ -15,15 +15,19 @@ export interface UserProfile {
   email: string;
   phone: string;
   avatarText: string;
+  title: string;
+  permissionsBadge: string;
 }
 
-const mockProfiles: Record<EducationRole, UserProfile> = {
+export const mockProfiles: Record<EducationRole, UserProfile> = {
   edu_owner: {
     name: 'Sanjar Rahimov',
     role: 'edu_owner',
     email: 'owner@registon.uz',
     phone: '+998 90 111 22 33',
     avatarText: 'SR',
+    title: "Ta'sischi / Markaz Boshlig'i",
+    permissionsBadge: "Super Boshqaruv (Barcha vakolatlar)",
   },
   edu_assistant_admin: {
     name: 'Aziza Karimova',
@@ -31,6 +35,8 @@ const mockProfiles: Record<EducationRole, UserProfile> = {
     email: 'admin@registon.uz',
     phone: '+998 93 222 33 44',
     avatarText: 'AK',
+    title: "Yordamchi Administrator",
+    permissionsBadge: "To'liq Operatsion Nazorat",
   },
   edu_operations_manager: {
     name: 'Dilshod Rustamov',
@@ -38,6 +44,8 @@ const mockProfiles: Record<EducationRole, UserProfile> = {
     email: 'manager@registon.uz',
     phone: '+998 91 333 44 55',
     avatarText: 'DR',
+    title: "Ish boshqaruvchi (Manager)",
+    permissionsBadge: "Jadval va Xonalar Nazorati",
   },
   teacher: {
     name: 'Temur Aliyev',
@@ -45,6 +53,8 @@ const mockProfiles: Record<EducationRole, UserProfile> = {
     email: 'temur.ielts@registon.uz',
     phone: '+998 90 999 00 11',
     avatarText: 'TA',
+    title: "Katta O'qituvchi (IELTS)",
+    permissionsBadge: "O'z Guruhlari va Davomat",
   },
   student: {
     name: 'Abdurashid Valiyev',
@@ -52,24 +62,152 @@ const mockProfiles: Record<EducationRole, UserProfile> = {
     email: 'abdurashid@gmail.com',
     phone: '+998 90 123 45 67',
     avatarText: 'AV',
+    title: "O'quvchi (IELTS Guruhi)",
+    permissionsBadge: "Shaxsiy O'quvchi Portali",
   },
 };
 
+export interface AuthAccount {
+  username: string;
+  role: EducationRole;
+  label: string;
+  description: string;
+}
+
+export const demoAccounts: AuthAccount[] = [
+  {
+    username: 'owner',
+    role: 'edu_owner',
+    label: "Boshliq (Ta'sischi / Owner)",
+    description: "Markazning barcha faoliyati, xodimlar, to'liq moliya, kassa va filiallar nazorati",
+  },
+  {
+    username: 'admin',
+    role: 'edu_assistant_admin',
+    label: "Yordamchi Admin (Assistant Admin)",
+    description: "Barcha o'quvchilar qabuli, to'lovlar, qarzdorliklar, guruhlar va davomatni to'liq nazorat qilish",
+  },
+  {
+    username: 'manager',
+    role: 'edu_operations_manager',
+    label: "Ish boshqaruvchi (Manager)",
+    description: "Dars jadvallari, o'quv xonalari bandligi, vaqtlar va xodimlar soatlari grafigi",
+  },
+  {
+    username: 'teacher',
+    role: 'teacher',
+    label: "O'qituvchi (Teacher)",
+    description: "O'z guruhlari davomati, dars jadvallari, uyga vazifalar, testlar va XP tangalar berish",
+  },
+  {
+    username: 'student',
+    role: 'student',
+    label: "O'quvchi (Student)",
+    description: "Mening darslarim, davomatim, to'lovlarim, uyga vazifalar va sovrinlar do'koni",
+  },
+];
+
 interface RoleContextType {
   role: EducationRole;
-  setRole: (role: EducationRole) => void;
   user: UserProfile;
+  isAuthenticated: boolean;
+  canControlEverything: boolean;
+  login: (usernameOrRole: string, password?: string) => boolean;
+  logout: () => void;
+  setRole: (role: EducationRole) => void;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<EducationRole>('edu_owner');
+  const [role, setRoleState] = useState<EducationRole>('edu_owner');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [hasMounted, setHasMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const savedAuth = localStorage.getItem('idrok_edu_auth');
+      if (savedAuth) {
+        const parsed = JSON.parse(savedAuth);
+        if (parsed.role && mockProfiles[parsed.role as EducationRole]) {
+          setRoleState(parsed.role as EducationRole);
+          setIsAuthenticated(Boolean(parsed.isAuthenticated));
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setHasMounted(true);
+  }, []);
+
+  const login = (usernameOrRole: string, _password?: string): boolean => {
+    const clean = usernameOrRole.trim().toLowerCase();
+    let detectedRole: EducationRole | null = null;
+
+    if (clean === 'owner' || clean === 'edu_owner' || clean.includes('sanjar')) {
+      detectedRole = 'edu_owner';
+    } else if (clean === 'admin' || clean === 'edu_assistant_admin' || clean.includes('aziza')) {
+      detectedRole = 'edu_assistant_admin';
+    } else if (clean === 'manager' || clean === 'edu_operations_manager' || clean.includes('dilshod')) {
+      detectedRole = 'edu_operations_manager';
+    } else if (clean === 'teacher' || clean.includes('temur')) {
+      detectedRole = 'teacher';
+    } else if (clean === 'student' || clean.includes('abdurashid')) {
+      detectedRole = 'student';
+    } else if (mockProfiles[clean as EducationRole]) {
+      detectedRole = clean as EducationRole;
+    }
+
+    if (detectedRole) {
+      setRoleState(detectedRole);
+      setIsAuthenticated(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          'idrok_edu_auth',
+          JSON.stringify({ role: detectedRole, isAuthenticated: true })
+        );
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        'idrok_edu_auth',
+        JSON.stringify({ role, isAuthenticated: false })
+      );
+    }
+  };
+
+  const setRole = (newRole: EducationRole) => {
+    setRoleState(newRole);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        'idrok_edu_auth',
+        JSON.stringify({ role: newRole, isAuthenticated: true })
+      );
+    }
+  };
 
   const user = mockProfiles[role];
+  // Boshliq va Yordamchi Admin markazdagi hamma narsani va hamma odamlarni nazorat qila oladi
+  const canControlEverything = role === 'edu_owner' || role === 'edu_assistant_admin';
 
   return (
-    <RoleContext.Provider value={{ role, setRole, user }}>
+    <RoleContext.Provider
+      value={{
+        role,
+        user,
+        isAuthenticated,
+        canControlEverything,
+        login,
+        logout,
+        setRole,
+      }}
+    >
       {children}
     </RoleContext.Provider>
   );

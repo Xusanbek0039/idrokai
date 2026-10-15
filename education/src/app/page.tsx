@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Header } from '../components/Header';
 import { Sidebar, NavTab } from '../components/Sidebar';
 import { useRole } from '../context/RoleContext';
+import { LoginScreen } from '../components/LoginScreen';
 import { OwnerView } from '../components/OwnerView';
 import { AssistantAdminView } from '../components/AssistantAdminView';
 import { OperationsManagerView } from '../components/OperationsManagerView';
@@ -22,22 +23,27 @@ import { ExamsTab } from '../components/tabs/ExamsTab';
 import { GamificationTab } from '../components/tabs/GamificationTab';
 
 export default function EducationDashboard() {
-  const { role } = useRole();
+  const { role, isAuthenticated } = useRole();
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
 
-  // Reset tab to overview when user changes role
+  // Rol o'zgarganda tabni boshqaruv paneliga qaytaramiz
   useEffect(() => {
     setCurrentTab('overview');
   }, [role]);
+
+  // Agar foydalanuvchi tizimga kirmagan bo'lsa, xavfsiz Login sahifasini ko'rsatamiz
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
 
   const renderContent = () => {
     // Agar Boshqaruv paneli (overview) bo'lsa, har bir rolning shaxsiy dashboardini ko'rsatamiz
     if (currentTab === 'overview') {
       switch (role) {
         case 'edu_owner':
-          return <OwnerView />;
+          return <OwnerView onNavigate={setCurrentTab} />;
         case 'edu_assistant_admin':
-          return <AssistantAdminView />;
+          return <AssistantAdminView onNavigate={setCurrentTab} />;
         case 'edu_operations_manager':
           return <OperationsManagerView />;
         case 'teacher':
@@ -77,7 +83,7 @@ export default function EducationDashboard() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-[#090D16] dark:text-slate-100">
       {/* Top Header with Theme, Language, and Interactive Role Switcher */}
       <Header />
 

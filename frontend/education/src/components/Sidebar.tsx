@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { useRole, EducationRole } from '../context/RoleContext';
+import { useRole } from '../context/RoleContext';
 import {
   LayoutDashboard,
   Users,
@@ -14,9 +14,11 @@ import {
   Award,
   BarChart3,
   BookOpen,
-  Clock,
   Coins,
-  DoorOpen,
+  Shield,
+  ShieldCheck,
+  Building2,
+  Sparkles,
 } from 'lucide-react';
 
 export type NavTab =
@@ -37,117 +39,198 @@ interface SidebarProps {
   onSelectTab: (tab: NavTab) => void;
 }
 
+interface NavItem {
+  id: NavTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
+  highlight?: boolean;
+}
+
+interface NavSection {
+  title?: string;
+  items: NavItem[];
+}
+
 export function Sidebar({ currentTab, onSelectTab }: SidebarProps) {
   const { t } = useLanguage();
-  const { role } = useRole();
+  const { role, canControlEverything } = useRole();
 
-  // Role bo'yicha menyu tuzilishi
-  const getNavItems = () => {
-    switch (role) {
-      case 'edu_owner':
-        return [
-          { id: 'overview' as NavTab, label: t.nav.dashboard, icon: LayoutDashboard },
-          { id: 'students' as NavTab, label: t.nav.students, icon: Users, badge: '6' },
-          { id: 'groups' as NavTab, label: t.nav.groups, icon: GraduationCap, badge: '4' },
-          { id: 'teachers' as NavTab, label: t.nav.teachers, icon: BookOpen },
-          { id: 'tuition' as NavTab, label: t.nav.tuition, icon: CreditCard, highlight: true },
-          { id: 'timetable' as NavTab, label: t.nav.timetable, icon: Calendar },
-          { id: 'attendance' as NavTab, label: t.nav.attendance, icon: CheckCircle2 },
-          { id: 'reports' as NavTab, label: t.nav.reports, icon: BarChart3 },
-        ];
-      case 'edu_assistant_admin':
-        return [
-          { id: 'overview' as NavTab, label: t.nav.dashboard, icon: LayoutDashboard },
-          { id: 'students' as NavTab, label: t.nav.students, icon: Users, badge: '6' },
-          { id: 'tuition' as NavTab, label: t.nav.tuition, icon: CreditCard, highlight: true },
-          { id: 'groups' as NavTab, label: t.nav.groups, icon: GraduationCap },
-          { id: 'attendance' as NavTab, label: t.nav.attendance, icon: CheckCircle2 },
-          { id: 'homework' as NavTab, label: t.nav.homework, icon: FileCheck },
-          { id: 'exams' as NavTab, label: t.nav.exams, icon: Award },
-        ];
-      case 'edu_operations_manager':
-        return [
-          { id: 'overview' as NavTab, label: t.nav.dashboard, icon: LayoutDashboard },
-          { id: 'timetable' as NavTab, label: t.nav.timetable, icon: Calendar },
-          { id: 'groups' as NavTab, label: t.nav.groups, icon: GraduationCap },
-          { id: 'teachers' as NavTab, label: t.nav.teachers, icon: BookOpen },
-          { id: 'attendance' as NavTab, label: t.nav.attendance, icon: CheckCircle2 },
-          { id: 'gamification' as NavTab, label: t.nav.gamification, icon: Award },
-        ];
-      case 'teacher':
-        return [
-          { id: 'overview' as NavTab, label: t.nav.dashboard, icon: LayoutDashboard },
-          { id: 'groups' as NavTab, label: t.nav.groups, icon: GraduationCap, badge: '3 ta guruh' },
-          { id: 'attendance' as NavTab, label: t.nav.attendance, icon: CheckCircle2, highlight: true },
-          { id: 'homework' as NavTab, label: t.nav.homework, icon: FileCheck },
-          { id: 'exams' as NavTab, label: t.nav.exams, icon: Award },
-          { id: 'gamification' as NavTab, label: t.nav.gamification, icon: Coins },
-        ];
-      case 'student':
-        return [
-          { id: 'overview' as NavTab, label: t.nav.dashboard, icon: LayoutDashboard },
-          { id: 'timetable' as NavTab, label: t.nav.myLessons, icon: Calendar },
-          { id: 'attendance' as NavTab, label: t.nav.myAttendance, icon: CheckCircle2 },
-          { id: 'homework' as NavTab, label: t.nav.myHomework, icon: FileCheck, badge: '2 ta yangi' },
-          { id: 'tuition' as NavTab, label: t.nav.myTuition, icon: CreditCard },
-          { id: 'gamification' as NavTab, label: t.nav.myRating, icon: Award, highlight: true },
-        ];
+  // Boshliq va Yordamchi Admin markazdagi barcha narsani va hamma odamlarni nazorat qila oladi
+  const getNavSections = (): NavSection[] => {
+    if (canControlEverything) {
+      return [
+        {
+          title: "Boshqaruv",
+          items: [
+            { id: 'overview', label: t.nav.dashboard, icon: LayoutDashboard },
+            { id: 'reports', label: t.nav.reports, icon: BarChart3 },
+          ],
+        },
+        {
+          title: "O'quv Bo'limi",
+          items: [
+            { id: 'students', label: t.nav.students, icon: Users, badge: '6' },
+            { id: 'groups', label: t.nav.groups, icon: GraduationCap, badge: '4' },
+            { id: 'teachers', label: t.nav.teachers, icon: BookOpen, badge: '3' },
+          ],
+        },
+        {
+          title: "Moliya & Kassa",
+          items: [
+            { id: 'tuition', label: t.nav.tuition, icon: CreditCard, highlight: true },
+          ],
+        },
+        {
+          title: "Grafik & Davomat",
+          items: [
+            { id: 'timetable', label: t.nav.timetable, icon: Calendar },
+            { id: 'attendance', label: t.nav.attendance, icon: CheckCircle2 },
+          ],
+        },
+        {
+          title: "LMS & Nazorat",
+          items: [
+            { id: 'homework', label: t.nav.homework, icon: FileCheck },
+            { id: 'exams', label: t.nav.exams, icon: Award },
+            { id: 'gamification', label: t.nav.gamification, icon: Coins },
+          ],
+        },
+      ];
     }
+
+    if (role === 'edu_operations_manager') {
+      return [
+        {
+          title: "Boshqaruv",
+          items: [
+            { id: 'overview', label: t.nav.dashboard, icon: LayoutDashboard },
+            { id: 'timetable', label: t.nav.timetable, icon: Calendar },
+            { id: 'groups', label: t.nav.groups, icon: GraduationCap },
+            { id: 'teachers', label: t.nav.teachers, icon: BookOpen },
+            { id: 'attendance', label: t.nav.attendance, icon: CheckCircle2 },
+            { id: 'exams', label: t.nav.exams, icon: Award },
+          ],
+        },
+      ];
+    }
+
+    if (role === 'teacher') {
+      return [
+        {
+          title: "Ustoz Kabineti",
+          items: [
+            { id: 'overview', label: t.nav.dashboard, icon: LayoutDashboard },
+            { id: 'groups', label: t.nav.groups, icon: GraduationCap, badge: '3 ta guruh' },
+            { id: 'attendance', label: t.nav.attendance, icon: CheckCircle2, highlight: true },
+            { id: 'homework', label: t.nav.homework, icon: FileCheck },
+            { id: 'exams', label: t.nav.exams, icon: Award },
+            { id: 'gamification', label: t.nav.gamification, icon: Coins },
+          ],
+        },
+      ];
+    }
+
+    // student
+    return [
+      {
+        title: "O'quvchi Portali",
+        items: [
+          { id: 'overview', label: t.nav.dashboard, icon: LayoutDashboard },
+          { id: 'timetable', label: t.nav.myLessons, icon: Calendar },
+          { id: 'attendance', label: t.nav.myAttendance, icon: CheckCircle2 },
+          { id: 'homework', label: t.nav.myHomework, icon: FileCheck, badge: '2 ta yangi' },
+          { id: 'tuition', label: t.nav.myTuition, icon: CreditCard },
+          { id: 'gamification', label: t.nav.myRating, icon: Award, highlight: true },
+        ],
+      },
+    ];
   };
 
-  const navItems = getNavItems();
+  const sections = getNavSections();
 
   return (
-    <aside className="w-64 shrink-0 border-r border-slate-200 bg-white/50 backdrop-blur-xs p-4 dark:border-slate-800 dark:bg-slate-900/50">
-      <div className="space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentTab === item.id;
+    <aside className="w-64 shrink-0 flex flex-col justify-between border-r border-slate-200/80 bg-white/70 backdrop-blur-md p-4 dark:border-slate-800/80 dark:bg-slate-900/70 transition-colors duration-200">
+      <div className="space-y-4 overflow-y-auto pr-1">
+        {/* Status Indicator Pill for Admin/Owner */}
+        {canControlEverything && (
+          <div className="rounded-xl border border-purple-200/80 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-brand-500/10 p-2.5 text-xs dark:border-purple-800/70 dark:from-purple-950/40 dark:to-indigo-950/40">
+            <div className="flex items-center gap-2 font-bold text-purple-950 dark:text-purple-200">
+              <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <span>To'liq Markaz Nazorati</span>
+            </div>
+            <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+              Barcha bo'limlar, kassa, xodimlar va o'quvchilar ochiq
+            </p>
+          </div>
+        )}
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => onSelectTab(item.id)}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium transition-all ${
-                isActive
-                  ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20 font-semibold'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-                <span>{item.label}</span>
+        {/* Navigation Sections */}
+        {sections.map((section, sIdx) => (
+          <div key={sIdx} className="space-y-1">
+            {section.title && (
+              <div className="px-3 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {section.title}
               </div>
-              {item.badge && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            )}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectTab(item.id)}
+                  className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-md shadow-brand-500/25 ring-1 ring-white/20'
+                      : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white'
                   }`}
                 >
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  <div className="flex items-center gap-3">
+                    <Icon
+                      className={`h-4 w-4 ${
+                        isActive
+                          ? 'text-white'
+                          : item.highlight
+                          ? 'text-emerald-500'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        isActive
+                          ? 'bg-white/25 text-white'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       {/* Mini Education Center Info Card at bottom */}
-      <div className="mt-8 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-brand-50/50 to-indigo-50/50 p-4 dark:border-slate-800/80 dark:from-brand-950/20 dark:to-indigo-950/20">
-        <div className="flex items-center gap-2 text-xs font-semibold text-brand-900 dark:text-brand-300">
-          <GraduationCap className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-          <span>{t.centerName}</span>
+      <div className="mt-6 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-brand-50/60 to-indigo-50/60 p-3.5 dark:border-slate-800/80 dark:from-slate-850 dark:to-slate-900">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
+          <Building2 className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+          <span className="truncate">{t.centerName}</span>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-          Toshkent, Chilonzor filiali
+        <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+          Chilonzor filiali • IDROK AI
         </p>
-        <div className="mt-3 flex items-center justify-between text-[11px]">
-          <span className="text-slate-500">Filial holati:</span>
-          <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Faol
+        <div className="mt-2.5 flex items-center justify-between text-[11px] border-t border-slate-200/60 dark:border-slate-800 pt-2">
+          <span className="text-slate-500">Tizim holati:</span>
+          <span className="inline-flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Faol & Himoyalangan
           </span>
         </div>
       </div>

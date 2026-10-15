@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'apps.identity.apps.IdentityConfig',
     'apps.tenancy.apps.TenancyConfig',
     'apps.debts.apps.DebtsConfig',
+    'apps.market.apps.MarketConfig',
     'apps.crm.apps.CrmConfig',
     'apps.work.apps.WorkConfig',
     'apps.knowledge.apps.KnowledgeConfig',

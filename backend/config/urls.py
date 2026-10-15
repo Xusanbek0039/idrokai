@@ -33,4 +33,8 @@ urlpatterns = [
     path('api/v1/', include('apps.tenancy.urls', namespace='tenancy')),
     path('api/v1/', include('apps.debts.urls', namespace='debts')),
     path('api/v1/', include('apps.work.urls', namespace='work')),
+
+    # 3. Market (Do'kon / Nasiya daftari) APIs
+    path('market/', include('apps.market.urls', namespace='market')),
+    path('api/v1/market/', include('apps.market.urls', namespace='market_v1')),
 ]
